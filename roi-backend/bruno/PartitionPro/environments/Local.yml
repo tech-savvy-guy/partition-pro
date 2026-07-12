@@ -1,0 +1,68 @@
+name: Local
+variables:
+  - name: baseURL
+    value: http://127.0.0.1:5011
+  - secret: true
+    name: bearer_token
+  - name: login_email
+    value: user@example.com
+  - name: case_manager_email
+    value: manager@example.com
+  - name: nps_contact_email
+    value: nps.contact@example.com
+  - secret: true
+    name: refreshToken
+  - name: case_id
+    value: ""
+  - name: partition_id
+    value: ""
+  - name: tenant_id
+    value: ""
+  - name: dataset_id
+    value: ""
+  - name: role_id
+    value: ""
+  - name: dataset_version_id
+    value: ""
+  - name: dataset_file_name
+    value: example.csv
+  - name: dataset_version
+    value: "1"
+  - name: selected_sku_ids
+    value: "[]"
+  - name: attribute_name
+    value: Brand
+  - name: partition_name
+    value: Example Partition
+  - name: partition_description
+    value: Example partition description
+  - name: create_user_email
+    value: user@example.com
+  - name: create_username
+    value: example.user
+  - name: create_user_name
+    value: Example User
+  - name: update_user_name
+    value: Example User
+  - name: created_by
+    value: admin@example.com
+  - secret: true
+    name: create_user_password
+  - name: upload_file_path
+    value: ""
+  - secret: true
+    name: upload_url
+  - name: userId
+    value: ""
+  - name: auto_break_max_depth
+    value: "3"
+  - name: auto_break_min_node_skus
+    value: "20"
+  - name: auto_break_candidate_attributes
+    value: "null"
+  - name: auto_break_polling_url
+    value: /reports/v1.0/workflows/{{case_id}}/{{partition_id}}/tree/auto-break
+  - name: node_id
+    value: ""
+  - name: task_id
+    value: ""

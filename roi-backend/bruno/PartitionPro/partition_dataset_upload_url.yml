@@ -1,0 +1,21 @@
+info:
+  name: partition_dataset_upload_url
+  type: http
+  seq: 22
+
+http:
+  method: POST
+  url: "{{baseURL}}/reports/v1.0/cases/{{case_id}}/partitions/{{partition_id}}/datasets/GROUPING/upload-url"
+  body:
+    type: json
+    data: |-
+      {
+        "file_name": "grouping1.csv"
+      }
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

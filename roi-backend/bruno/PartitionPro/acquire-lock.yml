@@ -1,0 +1,15 @@
+info:
+  name: acquire-lock
+  type: http
+  seq: 49
+
+http:
+  method: PUT
+  url: "{{baseURL}}/reports/v1.0/cases/{{case_id}}/partitions/{{partition_id}}/lock"
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

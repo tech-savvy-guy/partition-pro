@@ -1,0 +1,15 @@
+Django>=5.2,<5.3
+psycopg[binary]>=3.2
+python-dotenv>=1.0
+djangorestframework>=3.15
+PyJWT[crypto]>=2.8
+django-cors-headers>=4.4
+azure-identity>=1.17
+azure-storage-blob>=12.20
+celery>=5.6,<5.7
+django-redis>=6.0,<6.1
+numpy>=2.3
+pandas>=2.3
+redis>=7.1,<7.2
+scikit-learn>=1.8
+scipy>=1.17

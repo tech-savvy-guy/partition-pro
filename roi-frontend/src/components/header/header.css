@@ -1,0 +1,255 @@
+/* Allow dropdown panel to overflow header */
+.cds--header {
+  overflow: visible !important;
+}
+
+.cds--header__action.cds--btn--icon-only {
+  align-items: center;
+  justify-content: center;
+  padding-bottom: 14px;
+}
+
+.bpp-header-center {
+  flex: 1;
+  display: flex;
+  justify-content: flex-start; /* was center */
+  align-items: center;
+  position: relative;
+
+  /* optional but recommended: creates breathing room after the brand */
+  margin-left: 24px;
+}
+
+/* --- Mega panel (full-width, like Bain.com) --- */
+.bpp-nav-panel {
+  position: fixed;
+  left: 50%;
+  top: var(--app-header-h, 48px);
+  transform: translateX(-50%);
+  z-index: 9999;
+
+  /* card width like Bain */
+  width: min(1120px, calc(100vw - 64px));
+
+  background: #fff;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-top: 0;
+  border-radius: 0 0 14px 14px;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.18);
+  overflow: hidden; /* needed for red bar */
+}
+
+/* Inner padding now just padding (no max-width wrapper needed) */
+.bpp-nav-panel__inner {
+  padding: 32px;
+  box-sizing: border-box;
+}
+
+/* Red accent bar at bottom */
+.bpp-nav-panel::after {
+  content: "";
+  display: block;
+  height: 6px;
+  background: #c41230;
+}
+
+/* Two-column layout */
+.bpp-nav-panel__grid {
+  display: grid;
+  grid-template-columns: 1.15fr 0.85fr;
+  gap: 40px;
+  align-items: start;
+}
+
+/* Prevent children from overflowing grid */
+.bpp-nav-panel__grid > * {
+  min-width: 0;
+}
+
+/* Right column divider */
+.bpp-nav-panel__right {
+  border-left: 1px solid rgba(0, 0, 0, 0.1);
+  padding-left: 40px;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .bpp-nav-panel__grid {
+    grid-template-columns: 1fr;
+  }
+  .bpp-nav-panel__right {
+    border-left: 0;
+    padding-left: 0;
+  }
+}
+/* Caret: up by default, down when the item is open (hovered) */
+.bpp-nav-caret {
+  display: inline-block;
+  transform: rotate(180deg); /* makes ▾ appear as ▴ */
+  transition: transform 150ms ease;
+}
+
+.bpp-nav-caret--open {
+  transform: rotate(0deg); /* back to ▾ */
+}
+/* Premium vertical divider between brand and nav */
+.bpp-header-divider {
+  width: 1px;
+  height: 24px;
+  margin: 0 20px;
+
+  background: linear-gradient(
+    to bottom,
+    transparent,
+    rgba(0, 0, 0, 0.18),
+    transparent
+  );
+}
+/* Kill underline + focus ring on account button */
+.account-trigger button,
+.account-trigger .bx--header__action {
+  text-decoration: none !important;
+  box-shadow: none !important;
+  outline: none !important;
+  background: transparent !important;
+}
+
+/* Hover */
+.account-trigger button:hover,
+.account-trigger .bx--header__action:hover {
+  text-decoration: none !important;
+  box-shadow: none !important;
+  background-color: transparent !important;
+}
+
+/* Focus (this is the blue outline you see) */
+.account-trigger button:focus,
+.account-trigger button:focus-visible,
+.account-trigger .bx--header__action:focus,
+.account-trigger .bx--header__action:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+/* Ensure text never underlines */
+.account-trigger span {
+  text-decoration: none !important;
+}
+
+.account-trigger button:hover {
+  background-color: rgba(0, 0, 0, 0.04) !important;
+  border-radius: 6px;
+}
+
+/* Trigger avatar */
+.account-trigger__avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  background: #c41230;
+  color: #fff;
+  font-weight: 600;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Panel */
+/* Panel container */
+.account-panel {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 10px);
+  width: 320px;
+  background: #ffffff; /* white like header */
+  color: #161616;
+  border-radius: 8px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.18);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  z-index: 10000;
+}
+
+/* Top bar */
+.account-panel__top {
+  display: flex;
+  justify-content: space-between;
+  padding: 12px 16px;
+  font-size: 13px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.account-panel__role {
+  font-weight: 600;
+  color: #525252;
+}
+
+.account-panel__signout {
+  background: none;
+  border: none;
+  color: #c41230;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+/* User block */
+.account-panel__user {
+  display: flex;
+  gap: 16px;
+  padding: 20px 16px;
+}
+
+.account-panel__avatar {
+  width: 56px;
+  height: 56px;
+  border-radius: 999px;
+  background: #c41230;
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.account-panel__details {
+  flex: 1;
+}
+
+.account-panel__name {
+  font-size: 16px;
+  font-weight: 600;
+  color: #161616;
+}
+
+.account-panel__email {
+  font-size: 13px;
+  color: #525252;
+  margin-top: 2px;
+}
+
+.account-panel__view {
+  margin-top: 8px;
+  background: none;
+  border: none;
+  color: #0f62fe; /* IBM/Bain-style link blue */
+  cursor: pointer;
+  padding: 0;
+  font-size: 13px;
+}
+
+/* Footer */
+.account-panel__footer {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 14px 16px;
+  background: #f4f4f4;
+  color: #161616;
+  cursor: pointer;
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.account-panel__footer:hover {
+  background: #e8e8e8;
+}

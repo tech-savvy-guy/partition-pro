@@ -1,0 +1,25 @@
+info:
+  name: confirm-upload
+  type: http
+  seq: 23
+
+http:
+  method: POST
+  url: "{{baseURL}}/reports/v1.0/cases/{{case_id}}/datasets/POS/confirm"
+  body:
+    type: json
+    data: |-
+      {
+        "file_name": "{{dataset_file_name}}",
+        "blob_name":"case/{{case_id}}/POS/v{{dataset_version}}/{{dataset_file_name}}",
+        "version":"{{dataset_version}}",
+        "description":"test call",
+        "file_size":58979
+      }
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

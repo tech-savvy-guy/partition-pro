@@ -1,0 +1,46 @@
+info:
+  name: login
+  type: http
+  seq: 1
+
+http:
+  method: POST
+  url: "{{baseURL}}/security/v1.0/login"
+  headers:
+    - name: Content-Type
+      value: application/json
+  body:
+    type: json
+    data: '{"email":"{{login_email}}"}'
+  auth: none
+
+runtime:
+  scripts:
+    - type: after-response
+      code: |-
+        test("Status code is 200", function () {
+          expect(res.getStatus()).to.equal(200);
+        });
+
+        const body = res.getBody();
+        const data = typeof body === "string" ? JSON.parse(body) : body;
+        const access = data.access || data.access_token;
+        const refresh = data.refresh || data.refresh_token;
+
+        if (access) {
+          bru.setEnvVar("bearer_token", access);
+        }
+        if (refresh) {
+          bru.setEnvVar("refreshToken", refresh);
+        }
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5
+
+docs: |-
+  This is a POST request to authenticate a user by email.
+
+  A successful response returns access and refresh tokens. The after-response script stores them in `bearer_token` and `refreshToken` for the rest of the collection.

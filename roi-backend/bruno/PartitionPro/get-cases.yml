@@ -1,0 +1,34 @@
+info:
+  name: get-cases
+  type: http
+  seq: 13
+
+http:
+  method: GET
+  url: "{{baseURL}}/reports/v1.0/cases"
+  headers:
+    - name: X-Client-Timestamp
+      value: 2025-12-01 01:38:07.360371+05:30
+  params:
+    - name: case_id
+      value: "{{case_id}}"
+      type: query
+      disabled: true
+    - name: status
+      value: DRAFT
+      type: query
+      disabled: true
+    - name: is_archived
+      value: "false"
+      type: query
+      disabled: true
+  body:
+    type: text
+    data: ""
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

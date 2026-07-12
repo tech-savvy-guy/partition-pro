@@ -1,0 +1,34 @@
+info:
+  name: create-case
+  type: http
+  seq: 12
+
+http:
+  method: POST
+  url: "{{baseURL}}/reports/v1.0/cases"
+  headers:
+    - name: X-Client-Timestamp
+      value: 2025-12-01 01:38:07.360371+05:30
+  body:
+    type: json
+    data: |-
+      {
+        "case_name": "NPS Dashboard Build1",
+        "methodology": "SCRUM",
+        "case_code": "CASE-001",
+        "requested_by": "client@company.com",
+        "case_manager": "{{case_manager_email}}",
+        "nps_contact": "{{nps_contact_email}}",
+        "status": "OPEN",
+        "product_type": "Dashboard",
+        "category": "Analytics",
+        "description": "Build an NPS analytics dashboard for client.",
+        "tenant_id": "{{tenant_id}}"
+      }
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

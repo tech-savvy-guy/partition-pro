@@ -1,0 +1,62 @@
+.partition-tree-data-table table {
+  border-collapse: collapse;
+}
+
+.partition-tree-data-table th,
+.partition-tree-data-table td {
+  vertical-align: middle;
+}
+
+.partition-tree-data-table .selected-row,
+.partition-tree-data-table tr[data-state="selected"] {
+  background: color-mix(in oklch, var(--muted), transparent 20%);
+}
+
+.partition-tree-button svg,
+.partition-tree-tool-button svg {
+  pointer-events: none;
+}
+
+.react-flow__node {
+  font-family: inherit;
+}
+
+.react-flow__attribution {
+  display: none;
+}
+
+.workflow-attribute-table th,
+.sku-selection-table th,
+.level-testing-table th,
+.level-testing-result-table th {
+  background: #f3f4f6;
+  color: #374151;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.sku-cell {
+  display: block;
+  max-width: 18rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.col-checkbox {
+  width: 42px;
+  text-align: center;
+}
+
+.col-center {
+  text-align: center;
+}
+
+.col-filter-active {
+  color: #b42318;
+}
+
+.level-testing-accordion [data-slot="accordion-trigger"] {
+  border-radius: 0;
+}

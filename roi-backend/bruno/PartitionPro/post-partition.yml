@@ -1,0 +1,25 @@
+info:
+  name: post-partition
+  type: http
+  seq: 20
+
+http:
+  method: POST
+  url: "{{baseURL}}/reports/v1.0/cases/{{case_id}}/partitions"
+  body:
+    type: json
+    data: |-
+      {
+        "partition_name": "{{partition_name}}",
+        "description": "{{partition_description}}",
+        "status": "INACTIVE",
+        "step_status": "SKUSelection",
+        "base_partition_id":null
+      }
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

@@ -1,0 +1,22 @@
+info:
+  name: create-changelogs
+  type: http
+  seq: 46
+
+http:
+  method: POST
+  url: "{{baseURL}}/reports/v1.0/changelogs"
+  body:
+    type: json
+    data: |-
+      {
+        "heading": "New interface",
+        "description": "Redesigned UI for clarity and ease of use."
+      }
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

@@ -1,0 +1,10 @@
+export { ArrowLeftIcon } from "./ArrowLeftIcon";
+export { ArchiveIcon } from "./ArchiveIcon";
+export { ClipboardIcon } from "./ClipboardIcon";
+export { FolderIcon } from "./FolderIcon";
+export { HelpIcon } from "./HelpIcon";
+export { SettingsIcon } from "./SettingsIcon";
+export { HomeIcon } from "./HomeIcon";
+export { KnowledgeCenterIcon } from "./KnowledgeCenterIcon";
+export { InformationIcon } from "./InformationIcon"
+export { NoColorsIcon } from "./NoColors";

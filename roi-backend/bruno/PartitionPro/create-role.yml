@@ -1,0 +1,29 @@
+info:
+  name: create-role
+  type: http
+  seq: 8
+
+http:
+  method: POST
+  url: "{{baseURL}}/security/v1.0/roles/create"
+  body:
+    type: json
+    data: |-
+      {
+        "role_name": "User",
+        "permissions": {
+          "can_view_users": true,
+          "can_edit_users": false
+        },
+        "is_super_user": false,
+        "is_super_admin": false,
+        "tags": {},
+        "created_by": "system"
+      }
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

@@ -1,0 +1,25 @@
+info:
+  name: update-case-assignments
+  type: http
+  seq: 18
+
+http:
+  method: PUT
+  url: "{{baseURL}}/reports/v1.0/cases/{{case_id}}/assignments/role"
+  headers:
+    - name: X-Client-Timestamp
+      value: 2025-12-01 01:38:07.360371+05:30
+  body:
+    type: json
+    data: |-
+      {
+        "user_id": "{{userId}}",
+        "role": "VIEWER"
+      }
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

@@ -1,0 +1,18 @@
+info:
+  name: logout
+  type: http
+  seq: 3
+
+http:
+  method: POST
+  url: "{{baseURL}}/security/v1.0/logout"
+  body:
+    type: json
+    data: '{"refresh":"{{refreshToken}}"}'
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

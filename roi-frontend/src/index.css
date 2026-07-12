@@ -1,0 +1,137 @@
+/* BAIN DESIGN SYSTEM IMPORTS */
+@import "@bain/design-system/lib/styles.css";
+
+/* TAILWIND */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* GLOBAL ROOT VARIABLES */
+:root {
+  --app-header-h: 48px;
+  --scrollbar-size: 6px;
+  --scrollbar-thumb: #c8c8c8;
+  --scrollbar-thumb-hover: #a3a3a3;
+  --scrollbar-track: transparent;
+}
+
+/* BASE OVERRIDES */
+@layer base {
+  html {
+    font-family: theme("fontFamily.inter");
+  }
+
+  body {
+    font-family: theme("fontFamily.inter");
+  }
+
+  html {
+    overflow-x: hidden !important;
+    overscroll-behavior-x: none;
+  }
+
+  body {
+    overscroll-behavior-x: none;
+  }
+
+  .p-galleria,
+  .p-galleria-content,
+  .p-galleria-item-wrapper {
+    overflow: hidden !important;
+  }
+
+  /* Sleek minimal scrollbars (Firefox) */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+  }
+
+  /* Sleek minimal scrollbars (Chrome, Safari, Edge) */
+  *::-webkit-scrollbar {
+    width: var(--scrollbar-size);
+    height: var(--scrollbar-size);
+  }
+
+  *::-webkit-scrollbar-track {
+    background: var(--scrollbar-track);
+  }
+
+  *::-webkit-scrollbar-thumb {
+    background-color: var(--scrollbar-thumb);
+    border-radius: 999px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+
+  *::-webkit-scrollbar-thumb:hover {
+    background-color: var(--scrollbar-thumb-hover);
+  }
+
+  *::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+
+  /* Tab menus are single-row; never show a vertical scrollbar */
+  .p-tabmenu,
+  .p-tabmenu .p-tabmenu-nav {
+    overflow-y: hidden !important;
+  }
+}
+
+/* GLOBAL FLAT UI — REMOVE ALL BORDER RADII */
+*,
+.p-tile,
+.cds--tile,
+.cds--card,
+.p-datatable,
+.cds--modal-container,
+.p-panel,
+.p-dialog,
+.p-galleria,
+.p-toast,
+.cds--btn,
+.p-button {
+  border-radius: 0 !important;
+}
+
+/* PrimeReact tables */
+.p-datatable-thead > tr > th,
+.p-datatable-tbody > tr > td {
+  border-radius: 0 !important;
+}
+
+/* Carbon/Bain DS Notifications */
+.cds--inline-notification,
+.cds--tile,
+.cds--modal-container {
+  border-radius: 0 !important;
+}
+
+/* Galleria wrappers */
+.p-galleria-item-wrapper,
+.p-galleria-content {
+  border-radius: 0 !important;
+}
+
+/* Buttons */
+button:focus,
+button:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+/* Inputs */
+input:focus,
+input:focus-visible,
+select:focus,
+textarea:focus {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+/* Bain / Carbon specific */
+.bx--btn:focus,
+.bx--btn:focus-visible,
+.bx--text-input:focus {
+  box-shadow: none !important;
+}

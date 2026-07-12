@@ -1,0 +1,46 @@
+{
+  "nodes": {
+    "root": {
+      "background": "#D10001"
+    },
+    "attribute": {
+      "background": "#ffffff",
+      "text": "#0c0c0c",
+      "border": "1.5px solid #000"
+    },
+    "value": {
+      "palette": [
+        "#F8BBD0",
+        "#E1BEE7",
+        "#D1C4E9",
+        "#C5CAE9",
+        "#BBDEFB",
+        "#B3E5FC",
+        "#B2EBF2",
+        "#B2DFDB",
+        "#C8E6C9",
+        "#DCEDC8",
+        "#FFF9C4",
+        "#FFECB3"
+      ],
+      "disabled": "#0c0c0c",
+      "border": "1.5px solid #000"
+    }
+  },
+  "badges": {
+    "clientSku": {
+      "background": "#000000",
+      "text": "#ffffff"
+    },
+    "sku": {
+      "background": "#ffffff",
+      "text": "#000000",
+      "border": "1px solid #000000"
+    }
+  },
+  "ui": {
+    "selection": {
+      "outline": "dashed 2px #3b82f6"
+    }
+  }
+}

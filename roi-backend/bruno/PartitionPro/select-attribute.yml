@@ -1,0 +1,21 @@
+info:
+  name: select-attribute
+  type: http
+  seq: 40
+
+http:
+  method: POST
+  url: "{{baseURL}}/reports/v1.0/workflows/{{case_id}}/{{partition_id}}/node/{{node_id}}"
+  body:
+    type: json
+    data: |-
+      {
+        "attribute_name": "{{attribute_name}}"
+      }
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

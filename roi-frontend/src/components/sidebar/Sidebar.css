@@ -1,0 +1,13 @@
+/* keep nav under header and on top of content */
+    .cds--side-nav { top: var(--app-header-h, 48px); z-index: 30; }
+
+    /* cancel the off-canvas slide when rail is collapsed */
+    .cds--side-nav--collapsed.cds--side-nav--rail,
+    .cds--side-nav--ux.cds--side-nav--collapsed { transform: translateX(0) !important; }
+
+    /* remove yellow dashed focus outline within the nav */
+    .cds--side-nav:focus, .cds--side-nav:focus-visible, .cds--side-nav:focus-within,
+    .cds--side-nav *:focus, .cds--side-nav *:focus-visible {
+      outline: none !important;
+      box-shadow: none !important;
+    }

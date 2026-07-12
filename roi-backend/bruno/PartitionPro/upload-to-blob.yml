@@ -1,0 +1,20 @@
+info:
+  name: upload-to-blob
+  type: http
+  seq: 28
+
+http:
+  method: PUT
+  url: "{{upload_url}}"
+  headers:
+    - name: x-ms-blob-type
+      value: BlockBlob
+  body:
+    type: file
+    data: "{{upload_file_path}}"
+  auth: none
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

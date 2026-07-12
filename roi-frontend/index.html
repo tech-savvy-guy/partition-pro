@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <!-- Inter font -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    
+    <!-- PRELOAD CRITICAL ASSETS (before React loads) -->
+    <script>
+      (function () {
+        const assetsToPreload = [
+          // Hero / above-the-fold images
+          "/images/carousel-bg.png",
+          "/images/CR21647_hres.jpg",
+          "/images/CR21735_hres.jpg",
+          "/images/CR21756_hres.jpg",
+          "/images/CR21788_hres.jpg",
+
+          // Video poster (very important for LCP)
+          "/images/hero-video-poster.jpg",
+          "/images/hero-video-poster.svg",
+
+          // Hero / landing video
+          "/videos/hero-office.mp4",
+        ];
+
+        assetsToPreload.forEach((url) => {
+          const link = document.createElement("link");
+          link.rel = "preload";
+          link.href = url;
+
+          if (url.endsWith(".mp4")) {
+            link.as = "video";
+            link.type = "video/mp4";
+          } else if (url.match(/\.(jpg|jpeg|png|webp|avif|svg)$/)) {
+            link.as = "image";
+            link.fetchPriority = "high";
+          }
+
+          document.head.appendChild(link);
+        });
+      })();
+    </script>
+
+    <title>BCN PartitionPro</title>
+  </head>
+
+  <body class="bg-gray-50 text-gray-900">
+    <div id="root"></div>
+
+    <!-- React entry -->
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

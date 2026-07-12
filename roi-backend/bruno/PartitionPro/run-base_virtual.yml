@@ -1,0 +1,40 @@
+info:
+  name: run-base_virtual
+  type: http
+  seq: 38
+
+http:
+  method: POST
+  url: "{{baseURL}}/reports/v1.0/workflows/{{case_id}}/{{partition_id}}/preview-rollup/"
+  headers:
+    - name: X-Client-Timestamp
+      value: 2025-12-01 01:38:07.360371+05:30
+  body:
+    type: json
+    data: |-
+      {
+          "node_id": "{{node_id}}",
+          "attribute_name": "Updated Price Tier_PL",
+          "new_grouping_spec": "[Value, Premium | Mid Tier]",
+          "grouping_labels": {
+              "Premium | Mid Tier": "Mainstream",
+              "Value": "Value"
+          }
+      }
+  auth: inherit
+
+runtime:
+  scripts:
+    - type: after-response
+      code: |-
+        const body = res.getBody();
+        const data = typeof body === "string" ? JSON.parse(body) : body;
+        if (data.task_id) {
+          bru.setEnvVar("task_id", data.task_id);
+        }
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

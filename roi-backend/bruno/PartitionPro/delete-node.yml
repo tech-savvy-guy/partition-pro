@@ -1,0 +1,15 @@
+info:
+  name: delete-node
+  type: http
+  seq: 41
+
+http:
+  method: DELETE
+  url: "{{baseURL}}/reports/v1.0/workflows/{{case_id}}/{{partition_id}}/node/{{node_id}}"
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

@@ -1,0 +1,34 @@
+info:
+  name: refresh-token
+  type: http
+  seq: 4
+
+http:
+  method: POST
+  url: "{{baseURL}}/security/v1.0/token/refresh"
+  body:
+    type: json
+    data: '{"refresh":"{{refreshToken}}"}'
+  auth: none
+
+runtime:
+  scripts:
+    - type: after-response
+      code: |-
+        const body = res.getBody();
+        const data = typeof body === "string" ? JSON.parse(body) : body;
+        const access = data.access || data.access_token;
+        const refresh = data.refresh || data.refresh_token;
+
+        if (access) {
+          bru.setEnvVar("bearer_token", access);
+        }
+        if (refresh) {
+          bru.setEnvVar("refreshToken", refresh);
+        }
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

@@ -1,0 +1,126 @@
+from django.urls import path
+
+from config import views
+from core.views import (
+    CaseDetailView,
+    CaseDatasetDetailView,
+    CaseDatasetDownloadView,
+    CaseDatasetUploadCompleteView,
+    CaseDatasetUploadView,
+    CaseDatasetPreviewView,
+    CaseDatasetsView,
+    CasePartitionsView,
+    CasesView,
+    MeView,
+    PartitionDetailView,
+    PartitionSkuSelectionView,
+    PartitionTreeAttributeSelectionView,
+    PartitionTreeNodeColorsView,
+    PartitionTreeNodeView,
+    PartitionWorkflowStatusView,
+    UsersView,
+    VisualizationLatestView,
+    VisualizationMdsMetricsView,
+    VisualizationRunView,
+    VisualizationStatusView,
+)
+from security.views import ExchangeTokenView, LogoutView, RefreshTokenView
+
+urlpatterns = [
+    path('health/', views.health, name='health'),
+    path('api/auth/exchange/', ExchangeTokenView.as_view(), name='auth-exchange'),
+    path('api/auth/refresh/', RefreshTokenView.as_view(), name='auth-refresh'),
+    path('api/auth/logout/', LogoutView.as_view(), name='auth-logout'),
+    path('api/me/', MeView.as_view(), name='me'),
+    path('api/users/', UsersView.as_view(), name='users'),
+    path('api/cases/', CasesView.as_view(), name='cases'),
+    path('api/cases/<uuid:case_id>/', CaseDetailView.as_view(), name='case-detail'),
+    path(
+        'api/cases/<uuid:case_id>/datasets/',
+        CaseDatasetsView.as_view(),
+        name='case-datasets',
+    ),
+    path(
+        'api/cases/<uuid:case_id>/datasets/uploads/',
+        CaseDatasetUploadView.as_view(),
+        name='case-dataset-upload',
+    ),
+    path(
+        'api/cases/<uuid:case_id>/datasets/<uuid:dataset_id>/',
+        CaseDatasetDetailView.as_view(),
+        name='case-dataset-detail',
+    ),
+    path(
+        'api/cases/<uuid:case_id>/datasets/<uuid:dataset_id>/complete/',
+        CaseDatasetUploadCompleteView.as_view(),
+        name='case-dataset-upload-complete',
+    ),
+    path(
+        'api/cases/<uuid:case_id>/datasets/<uuid:dataset_id>/download/',
+        CaseDatasetDownloadView.as_view(),
+        name='case-dataset-download',
+    ),
+    path(
+        'api/cases/<uuid:case_id>/datasets/<uuid:dataset_id>/preview/',
+        CaseDatasetPreviewView.as_view(),
+        name='case-dataset-preview',
+    ),
+    path(
+        'api/cases/<uuid:case_id>/partitions/',
+        CasePartitionsView.as_view(),
+        name='case-partitions',
+    ),
+    path(
+        'api/cases/<uuid:case_id>/partitions/<uuid:partition_id>/',
+        PartitionDetailView.as_view(),
+        name='partition-detail',
+    ),
+    path(
+        'api/cases/<uuid:case_id>/partitions/<uuid:partition_id>/sku-selection/',
+        PartitionSkuSelectionView.as_view(),
+        name='partition-sku-selection',
+    ),
+    path(
+        'api/cases/<uuid:case_id>/partitions/<uuid:partition_id>/visualization/run/',
+        VisualizationRunView.as_view(),
+        name='partition-visualization-run',
+    ),
+    path(
+        'api/cases/<uuid:case_id>/partitions/<uuid:partition_id>/visualization/status/<str:task_id>/',
+        VisualizationStatusView.as_view(),
+        name='partition-visualization-status',
+    ),
+    path(
+        'api/cases/<uuid:case_id>/partitions/<uuid:partition_id>/visualization/mds-metrics/',
+        VisualizationMdsMetricsView.as_view(),
+        name='partition-visualization-mds-metrics',
+    ),
+    path(
+        'api/cases/<uuid:case_id>/partitions/<uuid:partition_id>/visualization/',
+        VisualizationLatestView.as_view(),
+        name='partition-visualization-latest',
+    ),
+    path(
+        'api/cases/<uuid:case_id>/partitions/<uuid:partition_id>/workflow/',
+        PartitionWorkflowStatusView.as_view(),
+        name='partition-workflow-status',
+    ),
+    path(
+        'api/cases/<uuid:case_id>/partitions/<uuid:partition_id>/'
+        'partition-tree/attribute-selection/',
+        PartitionTreeAttributeSelectionView.as_view(),
+        name='partition-tree-attribute-selection',
+    ),
+    path(
+        'api/cases/<uuid:case_id>/partitions/<uuid:partition_id>/'
+        'partition-tree/nodes/<str:node_id>/',
+        PartitionTreeNodeView.as_view(),
+        name='partition-tree-node',
+    ),
+    path(
+        'api/cases/<uuid:case_id>/partitions/<uuid:partition_id>/'
+        'partition-tree/nodes/<str:node_id>/colors/',
+        PartitionTreeNodeColorsView.as_view(),
+        name='partition-tree-node-colors',
+    ),
+]

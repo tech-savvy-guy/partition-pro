@@ -1,0 +1,18 @@
+packages: []
+
+# Supply-chain hardening (react-doctor/require-pnpm-hardening).
+minimumReleaseAge: 10080
+blockExoticSubdeps: true
+trustPolicy: no-downgrade
+
+# Pin transitive deps to provenance-bearing versions so they pass `trustPolicy:
+# no-downgrade`. reselect 5.1.1 (pinned by recharts) and semver 6.3.1 both
+# dropped the provenance attestation their predecessors carried; the next
+# attested releases restore it.
+overrides:
+  reselect: ^5.2.0
+  semver: ^7.7.3
+
+allowBuilds:
+  esbuild: true
+  msw: false
