@@ -10,11 +10,14 @@ import { authService } from "@/core/auth/authService"
 
 export class ApiError extends Error {
   status: number
+  /** Raw response body, for callers that need more than the flattened `detail` (e.g. 409 conflict payloads). */
+  data?: unknown
 
-  constructor(status: number, detail: string) {
+  constructor(status: number, detail: string, data?: unknown) {
     super(`API request failed with ${status}: ${detail}`)
     this.name = "ApiError"
     this.status = status
+    this.data = data
   }
 }
 
@@ -68,7 +71,12 @@ axiosClient.interceptors.response.use(
     const original = error.config as RetryableConfig | undefined
     const status = error.response?.status
 
-    if (!original || status !== 401 || original._retry || isAuthEndpoint(original.url ?? "")) {
+    if (
+      !original ||
+      status !== 401 ||
+      original._retry ||
+      isAuthEndpoint(original.url ?? "")
+    ) {
       throw normalizeError(error)
     }
 
@@ -102,7 +110,7 @@ function normalizeError(error: AxiosError): ApiError | AxiosError {
       ? data.detail
       : formatFieldErrors(data) || error.response?.statusText || error.message
 
-  return new ApiError(status, detail)
+  return new ApiError(status, detail, data)
 }
 
 function formatFieldErrors(

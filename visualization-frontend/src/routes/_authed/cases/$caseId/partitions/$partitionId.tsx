@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react"
-import { Link, createFileRoute } from "@tanstack/react-router"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { Link, createFileRoute, useNavigate } from "@tanstack/react-router"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { CheckIcon, LockIcon, RefreshCwIcon, SearchIcon } from "lucide-react"
 
@@ -13,8 +13,11 @@ import {
   TooltipProvider,
 } from "@/components/ui/tooltip"
 import {
+  CompareCoverageWorkspace,
   DatasetChip,
   MdsWorkspace,
+  ObmWorkspace,
+  SkuMathWorkspace,
   WorkspaceProvider,
   PartitionWorkspaceSkeleton,
   PartitionTreeWorkspace,
@@ -23,14 +26,20 @@ import {
   TabBtn,
   VisualizationWorkspace,
   WorkflowModal,
-  WorkflowPlaceholder,
+  useRoiResult,
   useWorkspace,
   visualizationDisplayStatus,
   visualizationResultOf,
   visualizationTaskIdOf,
   type SkuRow,
 } from "@/components/features/workspace"
-import { ApiError, CaseApi, PartitionApi, WorkflowApi, UserApi } from "@/core/api"
+import {
+  ApiError,
+  CaseApi,
+  PartitionApi,
+  WorkflowApi,
+  UserApi,
+} from "@/core/api"
 import type {
   Case,
   Partition,
@@ -52,6 +61,13 @@ const datasetBadges = [
   { name: "Attributes", version: "V1" },
   { name: "Crosspurchase", version: "V1" },
 ]
+
+// Well under the backend's default 10-minute lock TTL, so a renewal is never
+// missed even if the tab is briefly backgrounded/throttled.
+const LOCK_RENEW_INTERVAL_MS = 4 * 60 * 1000
+// While we hold the lock, poll for it having been force-released elsewhere
+// (e.g. a publisher releasing all locks to unblock dataset preprocessing).
+const LOCK_WATCH_INTERVAL_MS = 20 * 1000
 
 const VISUALIZATION_RUN_PAYLOAD = {
   metrics: ["chi", "phi"],
@@ -79,15 +95,96 @@ function PartitionWorkspace() {
   const params = Route.useParams()
   const caseId = params.caseId
   const partitionId = params.partitionId
+  const navigate = useNavigate()
+  const { showToast } = useUI()
 
   const caseQuery = useQuery({
     queryKey: ["case", caseId],
     queryFn: () => CaseApi.getCase(caseId),
   })
+  // Share caches with the identical-key queries further down the tree.
+  const currentUserQuery = useQuery({
+    queryKey: ["current-user"],
+    queryFn: UserApi.getCurrentUser,
+  })
+  const usersQuery = useQuery({
+    queryKey: ["assignable-users"],
+    queryFn: UserApi.listUsers,
+  })
+  // `/me/` doesn't expose a user id; resolve it via email against the
+  // assignable-users list (same approach the lock banner below uses).
+  const selfUserId = useMemo(
+    () =>
+      usersQuery.data?.find((u) => u.email === currentUserQuery.data?.email)
+        ?.id ?? null,
+    [currentUserQuery.data?.email, usersQuery.data]
+  )
+
+  // Best-effort edit lock: acquired on entering the workspace, renewed on an
+  // interval, released on leaving. While held, we also poll for it having
+  // been force-released (e.g. a publisher unblocking dataset preprocessing)
+  // and redirect out if so — there's no real-time push for this yet.
+  const holdsLockRef = useRef(false)
+  const [selfLockActive, setSelfLockActive] = useState(false)
+
   const partitionQuery = useQuery({
     queryKey: ["partition", caseId, partitionId],
     queryFn: () => PartitionApi.getPartition(caseId, partitionId),
+    refetchInterval: selfLockActive ? LOCK_WATCH_INTERVAL_MS : false,
   })
+
+  useEffect(() => {
+    let cancelled = false
+
+    PartitionApi.acquireLock(caseId, partitionId)
+      .then(() => {
+        if (cancelled) return
+        holdsLockRef.current = true
+        setSelfLockActive(true)
+      })
+      .catch(() => {
+        // Someone else holds it, or the request failed — proceed read-only;
+        // the lock banner below reflects whoever currently holds it.
+      })
+      .finally(() => {
+        if (!cancelled) void partitionQuery.refetch()
+      })
+
+    return () => {
+      cancelled = true
+      if (holdsLockRef.current) {
+        holdsLockRef.current = false
+        void PartitionApi.releaseLock(caseId, partitionId).catch(() => {})
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [caseId, partitionId])
+
+  useEffect(() => {
+    if (!selfLockActive) return
+    const interval = setInterval(() => {
+      PartitionApi.acquireLock(caseId, partitionId).catch(() => {
+        // Renewal failed (e.g. force-released mid-interval) — the watch
+        // effect below picks this up on its next partition refetch.
+      })
+    }, LOCK_RENEW_INTERVAL_MS)
+    return () => clearInterval(interval)
+  }, [caseId, partitionId, selfLockActive])
+
+  useEffect(() => {
+    if (!holdsLockRef.current || !selfUserId) return
+    const lockedBy = partitionQuery.data?.locked_by
+    if (lockedBy && lockedBy === selfUserId) return
+
+    // We held the lock but it's no longer ours — force-released elsewhere.
+    holdsLockRef.current = false
+    setSelfLockActive(false)
+    showToast("This partition was unlocked", "info", {
+      description:
+        "A publisher updated this case's datasets and released active partition locks. Returning to the case overview.",
+    })
+    void navigate({ to: "/cases/$caseId", params: { caseId } })
+  }, [caseId, navigate, partitionQuery.data?.locked_by, selfUserId, showToast])
 
   const pageError = caseQuery.error || partitionQuery.error
 
@@ -179,6 +276,7 @@ function PartitionWorkspaceContentInner({
       setSearch,
       setSkuSelection,
       markSkuDirty,
+      markSkuSelectionSaved,
       openRunModal,
       closeRunModal,
       startVisualization,
@@ -186,7 +284,7 @@ function PartitionWorkspaceContentInner({
       completeVisualization,
       failVisualization,
     },
-    meta: { isVisualization, visualizationUnlocked, secondaryTabs },
+    meta: { isVisualization, postSelectionUnlocked, secondaryTabs },
   } = useWorkspace()
 
   const visualizationStatus = visualizationDisplayStatus(visualization)
@@ -209,7 +307,10 @@ function PartitionWorkspaceContentInner({
     queryKey: visualizationLatestQueryKey,
     queryFn: async () => {
       try {
-        return await WorkflowApi.getVisualizationLatest(caseData.id, partitionData.id)
+        return await WorkflowApi.getVisualizationLatest(
+          caseData.id,
+          partitionData.id
+        )
       } catch (error) {
         if (error instanceof ApiError && error.status === 404) {
           return null
@@ -237,6 +338,23 @@ function PartitionWorkspaceContentInner({
     enabled: Boolean(visualizationTaskId),
     refetchInterval: visualizationTaskId ? 2000 : false,
   })
+
+  const roiTabActive =
+    primaryTab === "sku-math" ||
+    primaryTab === "obm" ||
+    (primaryTab === "sku-selection" && secondaryTab === "compare-coverage")
+
+  const roi = useRoiResult({
+    caseId: caseData.id,
+    partitionId: partitionData.id,
+    savedSelectedSkus: skuSelectionQuery.data?.selected_skus,
+    enabled: roiTabActive && !isVisualization,
+  })
+
+  const goToSkuSelection = useCallback(() => {
+    selectPrimaryTab("sku-selection")
+    selectSecondaryTab("overview")
+  }, [selectPrimaryTab, selectSecondaryTab])
 
   const currentUserQuery = useQuery({
     queryKey: ["current-user"],
@@ -279,7 +397,9 @@ function PartitionWorkspaceContentInner({
     onSuccess: async (response) => {
       if (response.status === "COMPLETED" && response.result) {
         completeVisualization(response.result)
-        await queryClient.invalidateQueries({ queryKey: visualizationLatestQueryKey })
+        await queryClient.invalidateQueries({
+          queryKey: visualizationLatestQueryKey,
+        })
         showToast("Workflow completed", "success", {
           description: "Visualization workflow completed successfully.",
         })
@@ -291,9 +411,7 @@ function PartitionWorkspaceContentInner({
       }
     },
     onError: (error) => {
-      failVisualization(
-        error instanceof Error ? error.message : undefined
-      )
+      failVisualization(error instanceof Error ? error.message : undefined)
       showToast("Workflow execution failed", "error", {
         description:
           error instanceof Error
@@ -310,11 +428,21 @@ function PartitionWorkspaceContentInner({
     onSuccess: async (response) => {
       setSkuSelection(response.selected_skus)
       markSkuDirty(false)
+      markSkuSelectionSaved(true)
       await queryClient.invalidateQueries({ queryKey: skuSelectionQueryKey })
       showToast("SKU selection saved", "success", {
-        description: "Your selection was updated and computation has started.",
+        description: isVisualization
+          ? "Your selection was updated and computation has started."
+          : "Your selection was updated.",
       })
-      runVisualizationMutation.mutate()
+      // Only the visualization methodology runs the chi/phi association
+      // pipeline here. ROI's sku-math/obm/coverage tabs pick up the new
+      // selection on their own via useRoiResult's auto-run (keyed off the
+      // saved-selection signature) — dispatching the visualization workflow
+      // for ROI cases would run the wrong pipeline entirely.
+      if (isVisualization) {
+        runVisualizationMutation.mutate()
+      }
     },
     onError: (error) => {
       showToast("Save failed", "error", {
@@ -355,7 +483,7 @@ function PartitionWorkspaceContentInner({
     !canSubmitSkuSelection ||
     selectedCount < 3
   const submitLabel =
-    visualizationUnlocked && skuSelectionDirty ? "Re-Compute" : "Submit"
+    postSelectionUnlocked && skuSelectionDirty ? "Re-Compute" : "Submit"
 
   const lockedBy = useMemo(
     () =>
@@ -425,7 +553,17 @@ function PartitionWorkspaceContentInner({
   useEffect(() => {
     if (skuSelectionDirty) return
     setSkuSelection(skuSelectionQuery.data?.selected_skus ?? [])
-  }, [setSkuSelection, skuSelectionDirty, skuSelectionQuery.data?.selected_skus])
+  }, [
+    setSkuSelection,
+    skuSelectionDirty,
+    skuSelectionQuery.data?.selected_skus,
+  ])
+
+  useEffect(() => {
+    if (skuSelectionQuery.data?.meta.has_saved_selection) {
+      markSkuSelectionSaved(true)
+    }
+  }, [markSkuSelectionSaved, skuSelectionQuery.data?.meta.has_saved_selection])
 
   useEffect(() => {
     if (visualizationLatestQuery.data?.result) {
@@ -439,7 +577,9 @@ function PartitionWorkspaceContentInner({
 
     if (statusData.status === "COMPLETED" && statusData.result) {
       completeVisualization(statusData.result)
-      void queryClient.invalidateQueries({ queryKey: visualizationLatestQueryKey })
+      void queryClient.invalidateQueries({
+        queryKey: visualizationLatestQueryKey,
+      })
     } else if (statusData.status === "FAILED") {
       failVisualization(statusData.error)
     } else if (ACTIVE_VISUALIZATION_STATUSES.has(statusData.status)) {
@@ -459,17 +599,17 @@ function PartitionWorkspaceContentInner({
     if (!workflow.primaryTabs.some((tab) => tab.value === primaryTab)) {
       selectPrimaryTab(workflow.primaryTabs[0]?.value ?? "")
     }
-    if (primaryTab === "visualization" && !visualizationUnlocked) {
+    if (primaryTab === "visualization" && !postSelectionUnlocked) {
       selectPrimaryTab("sku-selection")
     }
-    if (primaryTab === "partition-tree" && !visualizationUnlocked) {
+    if (primaryTab === "partition-tree" && !postSelectionUnlocked) {
       selectPrimaryTab("sku-selection")
     }
   }, [
     isVisualization,
     primaryTab,
     selectPrimaryTab,
-    visualizationUnlocked,
+    postSelectionUnlocked,
     workflow.primaryTabs,
   ])
 
@@ -485,12 +625,13 @@ function PartitionWorkspaceContentInner({
       selectSecondaryTab(secondaryTabs[0]?.value ?? "")
     }
     if (
-      (secondaryTab === "multi-dimensional-scaling" || secondaryTab === "compare-coverage") &&
-      !visualizationUnlocked
+      (secondaryTab === "multi-dimensional-scaling" ||
+        secondaryTab === "compare-coverage") &&
+      !postSelectionUnlocked
     ) {
       selectSecondaryTab("overview")
     }
-  }, [secondaryTab, secondaryTabs, selectSecondaryTab, visualizationUnlocked])
+  }, [secondaryTab, secondaryTabs, selectSecondaryTab, postSelectionUnlocked])
 
   return (
     <div className="-my-6 ml-[calc(50%-50vw)] flex min-h-[calc(100svh-3.5rem)] w-screen flex-col bg-background lg:-my-8">
@@ -557,10 +698,11 @@ function PartitionWorkspaceContentInner({
           <div className="flex h-12 items-center gap-0 overflow-x-auto px-8">
             {workflow.primaryTabs.map((tab) => {
               const isLocked =
-                tab.value === "partition-tree" && !visualizationUnlocked
+                tab.value === "partition-tree" && !postSelectionUnlocked
 
               const isDisabled =
-                (tab.value === "visualization" && !visualizationUnlocked) || isLocked
+                (tab.value === "visualization" && !postSelectionUnlocked) ||
+                isLocked
 
               const tabBtn = (
                 <TabBtn
@@ -607,7 +749,7 @@ function PartitionWorkspaceContentInner({
                 activeTab={secondaryTab}
                 onTabChange={selectSecondaryTab}
                 disabledTabs={
-                  visualizationUnlocked
+                  postSelectionUnlocked
                     ? []
                     : ["multi-dimensional-scaling", "compare-coverage"]
                 }
@@ -694,7 +836,9 @@ function PartitionWorkspaceContentInner({
                     <div className="px-8 pt-4">
                       <Alert variant="destructive">
                         <RefreshCwIcon aria-hidden="true" />
-                        <AlertTitle>SKU selection could not be loaded</AlertTitle>
+                        <AlertTitle>
+                          SKU selection could not be loaded
+                        </AlertTitle>
                         <AlertDescription className="flex flex-col gap-3">
                           <span>
                             {skuSelectionQuery.error instanceof Error
@@ -737,9 +881,9 @@ function PartitionWorkspaceContentInner({
               )}
 
               {secondaryTab === "compare-coverage" && (
-                <WorkflowPlaceholder
-                  title="Compare Coverage"
-                  description="Coverage comparison workspace coming soon."
+                <CompareCoverageWorkspace
+                  roi={roi}
+                  onGoToSkuSelection={goToSkuSelection}
                 />
               )}
             </>
@@ -750,9 +894,11 @@ function PartitionWorkspaceContentInner({
           )}
 
           {primaryTab === "sku-math" && (
-            <WorkflowPlaceholder
-              title="SKU Math"
-              description="SKU Math workspace coming soon."
+            <SkuMathWorkspace
+              roi={roi}
+              caseName={caseData.name}
+              partitionName={partitionData.name}
+              onGoToSkuSelection={goToSkuSelection}
             />
           )}
 
@@ -762,16 +908,27 @@ function PartitionWorkspaceContentInner({
               partitionId={partitionData.id}
               partitionName={partitionData.name}
               canEdit={caseData.can_create_partitions}
-              onRunNode={({ nodeName, node }) => {
-                openRunModal(node ?? null, nodeName)
-              }}
+              // Visualization methodology delegates node runs to the
+              // Sheet-based WorkflowModal (bubble charts + SKU list). ROI
+              // omits the handler so the tree opens its own workflow dialog
+              // (Attribute Selection / Overview / Base Testing / Level
+              // Testing) — the flow ported from roi-tool.
+              onRunNode={
+                isVisualization
+                  ? ({ nodeName, node }) => {
+                      openRunModal(node ?? null, nodeName)
+                    }
+                  : undefined
+              }
             />
           )}
 
           {primaryTab === "obm" && (
-            <WorkflowPlaceholder
-              title="OBM"
-              description="OBM workspace coming soon."
+            <ObmWorkspace
+              roi={roi}
+              caseName={caseData.name}
+              partitionName={partitionData.name}
+              onGoToSkuSelection={goToSkuSelection}
             />
           )}
         </div>
@@ -818,7 +975,9 @@ function VisualizationWorkflowNotice({
           <RefreshCwIcon aria-hidden="true" />
           <AlertTitle>Visualization workflow failed</AlertTitle>
           <AlertDescription className="flex flex-col gap-3">
-            <span>{errorMessage || "The workflow could not be completed."}</span>
+            <span>
+              {errorMessage || "The workflow could not be completed."}
+            </span>
             <Button variant="outline" onClick={onRetry}>
               <RefreshCwIcon data-icon="inline-start" />
               Retry workflow

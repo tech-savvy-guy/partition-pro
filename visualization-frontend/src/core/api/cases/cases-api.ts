@@ -24,8 +24,17 @@ import type {
   PartitionTreePreviewRollupResponse,
   PartitionTreePreviewRollupStatusResponse,
   PartitionTreeWorkflowData,
+  PreprocessingStatusResponse,
+  ReleasePartitionLocksResponse,
+  RoiLatestResponse,
+  RoiRunResponse,
+  RoiStatusResponse,
+  RunPreprocessingResponse,
+  RunRoiPayload,
   RunVisualizationPayload,
   RunWorkflowResponse,
+  SelectCaseDatasetsPayload,
+  SelectCaseDatasetsResponse,
   UpdateDatasetPayload,
   UpdateCasePayload,
   UpdateSkuSelectionPayload,
@@ -44,6 +53,20 @@ export const CaseApi = {
     http.post<Case>(Endpoints.cases.list, payload),
   updateCase: (caseId: string, payload: UpdateCasePayload) =>
     http.patch<Case>(Endpoints.cases.detail(caseId), payload),
+  getPreprocessingStatus: (caseId: string) =>
+    http.get<PreprocessingStatusResponse>(
+      Endpoints.cases.preprocessingStatus(caseId)
+    ),
+  runPreprocessing: (caseId: string) =>
+    http.post<RunPreprocessingResponse>(
+      Endpoints.cases.preprocessingRun(caseId),
+      {}
+    ),
+  releasePartitionLocks: (caseId: string) =>
+    http.post<ReleasePartitionLocksResponse>(
+      Endpoints.cases.partitionLocksRelease(caseId),
+      {}
+    ),
 }
 
 export const PartitionApi = {
@@ -51,6 +74,13 @@ export const PartitionApi = {
     http.get<Partition[]>(Endpoints.cases.partitions(caseId)),
   getPartition: (caseId: string, partitionId: string) =>
     http.get<Partition>(Endpoints.cases.partitionDetail(caseId, partitionId)),
+  acquireLock: (caseId: string, partitionId: string) =>
+    http.post<{ locked_by: string; lock_expires_at: string }>(
+      Endpoints.cases.partitionLock(caseId, partitionId),
+      {}
+    ),
+  releaseLock: (caseId: string, partitionId: string) =>
+    http.delete<void>(Endpoints.cases.partitionLock(caseId, partitionId)),
   createPartition: (caseId: string, payload: CreatePartitionPayload) =>
     http.post<Partition>(Endpoints.cases.partitions(caseId), payload),
   getPartitionDatasets: (caseId: string, partitionId: string) =>
@@ -86,7 +116,11 @@ export const PartitionApi = {
     payload: PartitionDatasetConfirmUploadPayload
   ) =>
     http.post<PartitionDatasetConfirmUploadResponse>(
-      Endpoints.cases.partitionDatasetConfirmUpload(caseId, partitionId, dataType),
+      Endpoints.cases.partitionDatasetConfirmUpload(
+        caseId,
+        partitionId,
+        dataType
+      ),
       payload
     ),
 }
@@ -216,18 +250,41 @@ export const WorkflowApi = {
     http.get<VisualizationMdsMetricsResponse>(
       Endpoints.cases.visualizationMdsMetrics(caseId, partitionId)
     ),
+  runRoi: (caseId: string, partitionId: string, payload?: RunRoiPayload) =>
+    http.post<RoiRunResponse>(
+      Endpoints.cases.roiRun(caseId, partitionId),
+      payload ?? {}
+    ),
+  pollRoiStatus: (caseId: string, partitionId: string, taskId: string) =>
+    http.get<RoiStatusResponse>(
+      Endpoints.cases.roiStatus(caseId, partitionId, taskId)
+    ),
+  getRoiLatest: (caseId: string, partitionId: string) =>
+    http.get<RoiLatestResponse>(Endpoints.cases.roiLatest(caseId, partitionId)),
 }
 
 export const DatasetApi = {
   listDatasets: (caseId: string) =>
     http.get<Dataset[]>(Endpoints.cases.datasets(caseId)),
   createUpload: (caseId: string, payload: CreateDatasetUploadPayload) =>
-    http.post<DatasetUploadResponse>(Endpoints.cases.datasetUploads(caseId), payload),
+    http.post<DatasetUploadResponse>(
+      Endpoints.cases.datasetUploads(caseId),
+      payload
+    ),
   updateDataset: (
     caseId: string,
     datasetId: string,
     payload: UpdateDatasetPayload
-  ) => http.patch<Dataset>(Endpoints.cases.datasetDetail(caseId, datasetId), payload),
+  ) =>
+    http.patch<Dataset>(
+      Endpoints.cases.datasetDetail(caseId, datasetId),
+      payload
+    ),
+  selectDatasets: (caseId: string, payload: SelectCaseDatasetsPayload) =>
+    http.post<SelectCaseDatasetsResponse>(
+      Endpoints.cases.datasetSelection(caseId),
+      payload
+    ),
   completeUpload: (caseId: string, datasetId: string) =>
     http.post<Dataset>(
       Endpoints.cases.datasetUploadComplete(caseId, datasetId)

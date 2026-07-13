@@ -43,6 +43,22 @@ def can_edit_workflow(user, case):
     return can_create_partition(user, case)
 
 
+def can_manage_case_locks(user, case):
+    """Stricter than ``can_create_partition``: excludes case-level EDITOR —
+    only the case-level PUBLISHER (or a global admin/owner) may force-release
+    other users' partition locks."""
+    if user_has_permission(user, Permission.CREATE_PARTITIONS.value):
+        return True
+    if getattr(case, "created_by_id", None) == getattr(user, "id", None):
+        return True
+    return CaseUserAssignment.objects.filter(
+        case=case,
+        user=user,
+        is_deleted=False,
+        role=CaseUserAssignment.Role.PUBLISHER,
+    ).exists()
+
+
 def create_case_assignments(case, assignments):
     assigned_user_ids = set()
     for assignment in assignments:
@@ -109,6 +125,7 @@ def serialize_case(case, user=None):
         "updated_at": case.updated_at.isoformat(),
         "user_case_role": get_case_assignment_role(case, user),
         "can_create_partitions": can_create_partition(user, case) if user else False,
+        "can_manage_case_locks": can_manage_case_locks(user, case) if user else False,
         "assignments": assignments,
     }
 

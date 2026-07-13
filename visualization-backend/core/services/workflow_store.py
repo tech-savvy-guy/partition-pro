@@ -2,10 +2,15 @@
 
 The workflow JSON is consolidated into ONE row per partition:
 
-- ``parameters`` holds ``selected_skus`` plus the visualization parameters.
-- ``result`` holds exactly two keys: ``visualization`` and ``partition_tree``.
-- ``status`` tracks the asynchronous visualization lifecycle; partition-tree
-  mutations never touch it.
+- ``parameters`` holds ``selected_skus`` plus the visualization/ROI parameters.
+- ``result`` holds up to seven keys: ``visualization``, ``partition_tree``,
+  ``sku_math``, ``obm``, ``level_testing``, ``coverage`` (the ROI
+  methodology's partition-level outputs) and ``node_testing`` (the latest
+  per-node Base/Level Testing run from the tree dialog).
+- ``status``/``tags.task_id`` track the asynchronous visualization lifecycle;
+  the ROI pipeline tracks its own lifecycle via ``tags.roi_task_id`` (see
+  ``core.services.roi.workflow``) so the two async jobs never clobber each
+  other's tags. Partition-tree mutations never touch either.
 
 All former ``tags.workflow_type`` discrimination is gone — there is one row, so
 lookups resolve by partition alone.
@@ -23,6 +28,11 @@ from core.models import Partition, WorkflowRun
 
 VISUALIZATION_KEY = "visualization"
 PARTITION_TREE_KEY = "partition_tree"
+SKU_MATH_KEY = "sku_math"
+OBM_KEY = "obm"
+LEVEL_TESTING_KEY = "level_testing"
+COVERAGE_KEY = "coverage"
+NODE_TESTING_KEY = "node_testing"
 
 
 def get_partition_workflow(partition: Partition) -> WorkflowRun | None:
@@ -72,6 +82,91 @@ def set_partition_tree(workflow: WorkflowRun, graph: Any) -> WorkflowRun:
 
 def clear_partition_tree(workflow: WorkflowRun) -> WorkflowRun:
     return set_partition_tree(workflow, None)
+
+
+# --- result: sku_math (ROI matrix) ------------------------------------------
+
+def get_sku_math(workflow: WorkflowRun) -> dict | None:
+    return (workflow.result or {}).get(SKU_MATH_KEY)
+
+
+def set_sku_math(workflow: WorkflowRun, payload: Any) -> WorkflowRun:
+    result = dict(workflow.result or {})
+    result[SKU_MATH_KEY] = payload
+    workflow.result = result
+    return workflow
+
+
+def clear_sku_math(workflow: WorkflowRun) -> WorkflowRun:
+    return set_sku_math(workflow, None)
+
+
+# --- result: obm -------------------------------------------------------------
+
+def get_obm(workflow: WorkflowRun) -> dict | None:
+    return (workflow.result or {}).get(OBM_KEY)
+
+
+def set_obm(workflow: WorkflowRun, payload: Any) -> WorkflowRun:
+    result = dict(workflow.result or {})
+    result[OBM_KEY] = payload
+    workflow.result = result
+    return workflow
+
+
+def clear_obm(workflow: WorkflowRun) -> WorkflowRun:
+    return set_obm(workflow, None)
+
+
+# --- result: level_testing -----------------------------------------------
+
+def get_level_testing(workflow: WorkflowRun) -> dict | None:
+    return (workflow.result or {}).get(LEVEL_TESTING_KEY)
+
+
+def set_level_testing(workflow: WorkflowRun, payload: Any) -> WorkflowRun:
+    result = dict(workflow.result or {})
+    result[LEVEL_TESTING_KEY] = payload
+    workflow.result = result
+    return workflow
+
+
+def clear_level_testing(workflow: WorkflowRun) -> WorkflowRun:
+    return set_level_testing(workflow, None)
+
+
+# --- result: coverage ---------------------------------------------------------
+
+def get_coverage(workflow: WorkflowRun) -> dict | None:
+    return (workflow.result or {}).get(COVERAGE_KEY)
+
+
+def set_coverage(workflow: WorkflowRun, payload: Any) -> WorkflowRun:
+    result = dict(workflow.result or {})
+    result[COVERAGE_KEY] = payload
+    workflow.result = result
+    return workflow
+
+
+def clear_coverage(workflow: WorkflowRun) -> WorkflowRun:
+    return set_coverage(workflow, None)
+
+
+# --- result: node_testing (latest per-node Base/Level Testing run) -----------
+
+def get_node_testing(workflow: WorkflowRun) -> dict | None:
+    return (workflow.result or {}).get(NODE_TESTING_KEY)
+
+
+def set_node_testing(workflow: WorkflowRun, payload: Any) -> WorkflowRun:
+    result = dict(workflow.result or {})
+    result[NODE_TESTING_KEY] = payload
+    workflow.result = result
+    return workflow
+
+
+def clear_node_testing(workflow: WorkflowRun) -> WorkflowRun:
+    return set_node_testing(workflow, None)
 
 
 # --- parameters: selected SKUs ---------------------------------------------

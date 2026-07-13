@@ -233,6 +233,38 @@ function styleForValue(
     : {};
 }
 
+/**
+ * Meta from an explicit start/step override (or preset defaults). Used by the
+ * SKU Math tab, whose ROI diagonal is 0 by construction — the diagonal-min
+ * autostart of `computeMeta` would always yield null there — and by the
+ * base-testing / OBM start-step editors to apply user overrides.
+ */
+export function buildHeatmapMetaFromStartStep(
+  start: number | null,
+  step: number | null,
+): DiagonalBucketHeatmapMeta {
+  if (
+    start == null ||
+    step == null ||
+    !Number.isFinite(start) ||
+    !Number.isFinite(step) ||
+    step <= 0
+  ) {
+    return { start, step, thresholds: null, cell_colors: [] };
+  }
+  return {
+    start,
+    step,
+    thresholds: {
+      t1: start,
+      t2: start + step,
+      t3: start + 2 * step,
+      t4: start + 3 * step,
+    },
+    cell_colors: [],
+  };
+}
+
 export function computeBaseTestingHeatmapMetaFromMatrix(
   matrix: unknown[][],
 ): BaseTestingHeatmapMeta {

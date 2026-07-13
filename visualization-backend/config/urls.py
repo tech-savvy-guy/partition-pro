@@ -5,19 +5,28 @@ from core.views import (
     CaseDetailView,
     CaseDatasetDetailView,
     CaseDatasetDownloadView,
+    CaseDatasetSelectionView,
     CaseDatasetUploadCompleteView,
     CaseDatasetUploadView,
     CaseDatasetPreviewView,
     CaseDatasetsView,
+    CasePartitionLocksReleaseView,
     CasePartitionsView,
+    CasePreprocessingRunView,
     CasesView,
     MeView,
     PartitionDetailView,
+    PartitionLockView,
     PartitionSkuSelectionView,
     PartitionTreeAttributeSelectionView,
     PartitionTreeNodeColorsView,
     PartitionTreeNodeView,
+    PartitionWorkflowProcessRunView,
     PartitionWorkflowStatusView,
+    PreprocessingStatusView,
+    RoiLatestView,
+    RoiRunView,
+    RoiStatusView,
     UsersView,
     VisualizationLatestView,
     VisualizationMdsMetricsView,
@@ -66,6 +75,26 @@ urlpatterns = [
         name='case-dataset-preview',
     ),
     path(
+        'api/cases/<uuid:case_id>/preprocessing/',
+        PreprocessingStatusView.as_view(),
+        name='case-preprocessing-status',
+    ),
+    path(
+        'api/cases/<uuid:case_id>/datasets/select/',
+        CaseDatasetSelectionView.as_view(),
+        name='case-dataset-selection',
+    ),
+    path(
+        'api/cases/<uuid:case_id>/preprocessing/run/',
+        CasePreprocessingRunView.as_view(),
+        name='case-preprocessing-run',
+    ),
+    path(
+        'api/cases/<uuid:case_id>/partitions/locks/release/',
+        CasePartitionLocksReleaseView.as_view(),
+        name='case-partition-locks-release',
+    ),
+    path(
         'api/cases/<uuid:case_id>/partitions/',
         CasePartitionsView.as_view(),
         name='case-partitions',
@@ -79,6 +108,11 @@ urlpatterns = [
         'api/cases/<uuid:case_id>/partitions/<uuid:partition_id>/sku-selection/',
         PartitionSkuSelectionView.as_view(),
         name='partition-sku-selection',
+    ),
+    path(
+        'api/cases/<uuid:case_id>/partitions/<uuid:partition_id>/lock/',
+        PartitionLockView.as_view(),
+        name='partition-lock',
     ),
     path(
         'api/cases/<uuid:case_id>/partitions/<uuid:partition_id>/visualization/run/',
@@ -101,9 +135,30 @@ urlpatterns = [
         name='partition-visualization-latest',
     ),
     path(
+        'api/cases/<uuid:case_id>/partitions/<uuid:partition_id>/roi/run/',
+        RoiRunView.as_view(),
+        name='partition-roi-run',
+    ),
+    path(
+        'api/cases/<uuid:case_id>/partitions/<uuid:partition_id>/roi/status/<str:task_id>/',
+        RoiStatusView.as_view(),
+        name='partition-roi-status',
+    ),
+    path(
+        'api/cases/<uuid:case_id>/partitions/<uuid:partition_id>/roi/',
+        RoiLatestView.as_view(),
+        name='partition-roi-latest',
+    ),
+    path(
         'api/cases/<uuid:case_id>/partitions/<uuid:partition_id>/workflow/',
         PartitionWorkflowStatusView.as_view(),
         name='partition-workflow-status',
+    ),
+    path(
+        'api/cases/<uuid:case_id>/partitions/<uuid:partition_id>/'
+        'workflow/<str:process_name>/run/',
+        PartitionWorkflowProcessRunView.as_view(),
+        name='partition-workflow-process-run',
     ),
     path(
         'api/cases/<uuid:case_id>/partitions/<uuid:partition_id>/'

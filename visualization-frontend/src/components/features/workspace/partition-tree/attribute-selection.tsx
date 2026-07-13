@@ -650,7 +650,7 @@ export default function AttributeSelection({
           if (!open) setValuesDialogOpen(false);
         }}
       >
-        <DialogContent className="w-[92vw] max-w-[520px] px-4 pt-1 pb-4">
+        <DialogContent className="w-[92vw] max-w-[520px] px-4 pt-1 pb-4 sm:max-w-[520px]">
           <DialogHeader className="px-4 py-3">
             <DialogTitle render={<div />}>
               <div className="flex min-w-0 items-center gap-2">

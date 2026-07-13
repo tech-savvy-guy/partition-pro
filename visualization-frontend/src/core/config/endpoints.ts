@@ -12,7 +12,8 @@ export const Endpoints = {
     list: "/api/cases/",
     detail: (caseId: string) => `/api/cases/${caseId}/`,
     datasets: (caseId: string) => `/api/cases/${caseId}/datasets/`,
-    datasetUploads: (caseId: string) => `/api/cases/${caseId}/datasets/uploads/`,
+    datasetUploads: (caseId: string) =>
+      `/api/cases/${caseId}/datasets/uploads/`,
     datasetDetail: (caseId: string, datasetId: string) =>
       `/api/cases/${caseId}/datasets/${datasetId}/`,
     datasetUploadComplete: (caseId: string, datasetId: string) =>
@@ -21,9 +22,19 @@ export const Endpoints = {
       `/api/cases/${caseId}/datasets/${datasetId}/download/`,
     datasetPreview: (caseId: string, datasetId: string) =>
       `/api/cases/${caseId}/datasets/${datasetId}/preview/`,
+    datasetSelection: (caseId: string) =>
+      `/api/cases/${caseId}/datasets/select/`,
+    preprocessingStatus: (caseId: string) =>
+      `/api/cases/${caseId}/preprocessing/`,
+    preprocessingRun: (caseId: string) =>
+      `/api/cases/${caseId}/preprocessing/run/`,
+    partitionLocksRelease: (caseId: string) =>
+      `/api/cases/${caseId}/partitions/locks/release/`,
     partitions: (caseId: string) => `/api/cases/${caseId}/partitions/`,
     partitionDetail: (caseId: string, partitionId: string) =>
       `/api/cases/${caseId}/partitions/${partitionId}/`,
+    partitionLock: (caseId: string, partitionId: string) =>
+      `/api/cases/${caseId}/partitions/${partitionId}/lock/`,
     partitionSkuSelection: (caseId: string, partitionId: string) =>
       `/api/cases/${caseId}/partitions/${partitionId}/sku-selection/`,
     partitionDatasets: (caseId: string, partitionId: string) =>
@@ -48,21 +59,13 @@ export const Endpoints = {
       `/api/cases/${caseId}/partitions/${partitionId}/datasets/${dataType}/confirm/`,
     workflowStatus: (caseId: string, partitionId: string) =>
       `/api/cases/${caseId}/partitions/${partitionId}/workflow/`,
-    workflowRun: (
-      caseId: string,
-      partitionId: string,
-      processName: string
-    ) =>
+    workflowRun: (caseId: string, partitionId: string, processName: string) =>
       `/api/cases/${caseId}/partitions/${partitionId}/workflow/${processName}/run/`,
     partitionTreeRun: (caseId: string, partitionId: string) =>
       `/api/cases/${caseId}/partitions/${partitionId}/partition-tree/run/`,
     partitionTreeAttributeSelection: (caseId: string, partitionId: string) =>
       `/api/cases/${caseId}/partitions/${partitionId}/partition-tree/attribute-selection/`,
-    partitionTreeNode: (
-      caseId: string,
-      partitionId: string,
-      nodeId: string
-    ) =>
+    partitionTreeNode: (caseId: string, partitionId: string, nodeId: string) =>
       `/api/cases/${caseId}/partitions/${partitionId}/partition-tree/nodes/${nodeId}/`,
     partitionTreeNodeColors: (
       caseId: string,
@@ -90,6 +93,12 @@ export const Endpoints = {
       `/api/cases/${caseId}/partitions/${partitionId}/visualization/`,
     visualizationMdsMetrics: (caseId: string, partitionId: string) =>
       `/api/cases/${caseId}/partitions/${partitionId}/visualization/mds-metrics/`,
+    roiRun: (caseId: string, partitionId: string) =>
+      `/api/cases/${caseId}/partitions/${partitionId}/roi/run/`,
+    roiStatus: (caseId: string, partitionId: string, taskId: string) =>
+      `/api/cases/${caseId}/partitions/${partitionId}/roi/status/${taskId}/`,
+    roiLatest: (caseId: string, partitionId: string) =>
+      `/api/cases/${caseId}/partitions/${partitionId}/roi/`,
   },
 } as const
 

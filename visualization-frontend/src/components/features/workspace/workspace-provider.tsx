@@ -15,7 +15,11 @@ import type { WorkflowNodeObject } from "@/lib/partition-tree/tree.types"
  */
 export type VisualizationState =
   | { status: "idle" }
-  | { status: "running"; phase: VisualizationWorkflowStatus; taskId: string | null }
+  | {
+      status: "running"
+      phase: VisualizationWorkflowStatus
+      taskId: string | null
+    }
   | { status: "completed"; result: VisualizationResult }
   | { status: "failed"; error?: string }
 
@@ -26,6 +30,10 @@ type WorkspaceState = {
   secondaryTab: string
   selectedSkus: string[]
   skuSelectionDirty: boolean
+  /** A SKU selection has been saved at least once for this partition — the
+   * ROI methodology's signal for unlocking post-selection tabs (mirrors what
+   * a completed visualization run means for the visualization methodology). */
+  skuSelectionSaved: boolean
   search: string
   runModal: RunModalState
   visualization: VisualizationState
@@ -37,6 +45,7 @@ type WorkspaceAction =
   | { type: "setSearch"; value: string }
   | { type: "setSkuSelection"; value: React.SetStateAction<string[]> }
   | { type: "markSkuDirty"; value: boolean }
+  | { type: "markSkuSelectionSaved"; value: boolean }
   | { type: "openRunModal"; node: WorkflowNodeObject | null; title?: string }
   | { type: "closeRunModal" }
   | { type: "startVisualization" }
@@ -55,6 +64,7 @@ type WorkspaceActions = {
   setSearch: (value: string) => void
   setSkuSelection: (value: React.SetStateAction<string[]>) => void
   markSkuDirty: (value: boolean) => void
+  markSkuSelectionSaved: (value: boolean) => void
   openRunModal: (node: WorkflowNodeObject | null, title?: string) => void
   closeRunModal: () => void
   startVisualization: () => void
@@ -69,7 +79,14 @@ type WorkspaceActions = {
 
 type WorkspaceMeta = {
   isVisualization: boolean
-  visualizationUnlocked: boolean
+  /** Whether the post-selection tabs (partition-tree, and — for the
+   * visualization methodology — the visualization tab itself) are unlocked.
+   * Visualization methodology: unlocked once its workflow completes. ROI
+   * methodology: unlocked once a SKU selection has been saved — ROI's
+   * partition-tree only ever reads the saved selection, never a
+   * visualization result, so it must not depend on the visualization
+   * pipeline at all. */
+  postSelectionUnlocked: boolean
   secondaryTabs: NonNullable<WorkflowConfig["secondaryTabsByPrimary"][string]>
 }
 
@@ -107,7 +124,10 @@ export function visualizationTaskIdOf(
   return visualization.status === "running" ? visualization.taskId : null
 }
 
-function reducer(state: WorkspaceState, action: WorkspaceAction): WorkspaceState {
+function reducer(
+  state: WorkspaceState,
+  action: WorkspaceAction
+): WorkspaceState {
   switch (action.type) {
     case "selectPrimaryTab":
       return state.primaryTab === action.value
@@ -130,6 +150,10 @@ function reducer(state: WorkspaceState, action: WorkspaceAction): WorkspaceState
       return state.skuSelectionDirty === action.value
         ? state
         : { ...state, skuSelectionDirty: action.value }
+    case "markSkuSelectionSaved":
+      return state.skuSelectionSaved === action.value
+        ? state
+        : { ...state, skuSelectionSaved: action.value }
     case "openRunModal":
       return { ...state, runModal: { node: action.node, title: action.title } }
     case "closeRunModal":
@@ -197,6 +221,7 @@ export function WorkspaceProvider({
     secondaryTab: initialSecondaryTab,
     selectedSkus: [],
     skuSelectionDirty: false,
+    skuSelectionSaved: false,
     search: "",
     runModal: null,
     visualization: { status: "idle" } as VisualizationState,
@@ -206,12 +231,15 @@ export function WorkspaceProvider({
   // identity and never trigger re-renders on their own.
   const actions = React.useMemo<WorkspaceActions>(
     () => ({
-      selectPrimaryTab: (value) => dispatch({ type: "selectPrimaryTab", value }),
+      selectPrimaryTab: (value) =>
+        dispatch({ type: "selectPrimaryTab", value }),
       selectSecondaryTab: (value) =>
         dispatch({ type: "selectSecondaryTab", value }),
       setSearch: (value) => dispatch({ type: "setSearch", value }),
       setSkuSelection: (value) => dispatch({ type: "setSkuSelection", value }),
       markSkuDirty: (value) => dispatch({ type: "markSkuDirty", value }),
+      markSkuSelectionSaved: (value) =>
+        dispatch({ type: "markSkuSelectionSaved", value }),
       openRunModal: (node, title) =>
         dispatch({ type: "openRunModal", node, title }),
       closeRunModal: () => dispatch({ type: "closeRunModal" }),
@@ -233,11 +261,13 @@ export function WorkspaceProvider({
   )
   const isVisualization =
     methodology.trim().toLowerCase() === CaseMethodology.Visualization
-  const visualizationUnlocked = state.visualization.status === "completed"
+  const postSelectionUnlocked = isVisualization
+    ? state.visualization.status === "completed"
+    : state.skuSelectionSaved
 
   const meta = React.useMemo<WorkspaceMeta>(
-    () => ({ isVisualization, visualizationUnlocked, secondaryTabs }),
-    [isVisualization, visualizationUnlocked, secondaryTabs]
+    () => ({ isVisualization, postSelectionUnlocked, secondaryTabs }),
+    [isVisualization, postSelectionUnlocked, secondaryTabs]
   )
 
   const value = React.useMemo<WorkspaceContextValue>(

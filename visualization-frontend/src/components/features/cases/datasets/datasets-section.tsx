@@ -5,6 +5,8 @@ import {
   Check,
   DownloadIcon,
   Eye,
+  LockIcon,
+  PlayIcon,
   RefreshCwIcon,
   SaveIcon,
   UploadIcon,
@@ -59,6 +61,8 @@ import {
 } from "@/components/ui/select"
 import { Spinner } from "@/components/ui/spinner"
 import {
+  ApiError,
+  CaseApi,
   DatasetApi,
   DatasetStatus,
   DatasetType,
@@ -66,6 +70,8 @@ import {
   type Dataset,
   type DatasetStatusValue,
   type DatasetTypeValue,
+  type LockedPartitionsConflict,
+  type SelectCaseDatasetsPayload,
 } from "@/core/api"
 import { useRbac } from "@/core/rbac"
 import { useUI } from "@/core/ui"
@@ -113,6 +119,26 @@ const datasetOptions: Array<{ label: string; value: DatasetTypeValue }> = [
   { label: "Cross-purchase", value: DatasetType.CrossPurchase },
 ]
 
+const selectionPayloadFields: Record<
+  DatasetTypeValue,
+  keyof SelectCaseDatasetsPayload
+> = {
+  [DatasetType.Pos]: "pos_dataset_id",
+  [DatasetType.Attributes]: "attributes_dataset_id",
+  [DatasetType.CrossPurchase]: "cross_purchase_dataset_id",
+}
+
+const ACTIVE_PREPROCESSING_STATUSES = new Set(["PENDING", "QUEUED", "RUNNING"])
+
+function extractLockedPartitionsConflict(
+  error: unknown
+): LockedPartitionsConflict | null {
+  if (!(error instanceof ApiError) || error.status !== 409) return null
+  const data = error.data as Partial<LockedPartitionsConflict> | undefined
+  if (!Array.isArray(data?.locked_partitions)) return null
+  return data as LockedPartitionsConflict
+}
+
 const statusLabels: Record<DatasetStatusValue, string> = {
   [DatasetStatus.Processing]: "Processing",
   [DatasetStatus.Ready]: "Ready",
@@ -134,6 +160,7 @@ type DatasetSectionProps = {
   isLoading: boolean
   error: Error | null
   partitionCount: number | null
+  canManageCaseLocks: boolean
   onRetry: () => void
 }
 
@@ -143,6 +170,7 @@ export function DatasetsSection({
   isLoading,
   error,
   partitionCount,
+  canManageCaseLocks,
   onRetry,
 }: DatasetSectionProps) {
   const queryClient = useQueryClient()
@@ -169,6 +197,25 @@ export function DatasetsSection({
     },
     enabled: Boolean(viewingDataset),
   })
+  const preprocessingQuery = useQuery({
+    queryKey: ["preprocessing-status", caseId],
+    queryFn: async () => {
+      try {
+        return await CaseApi.getPreprocessingStatus(caseId)
+      } catch (statusError) {
+        if (statusError instanceof ApiError && statusError.status === 404) {
+          return null
+        }
+        throw statusError
+      }
+    },
+    retry: false,
+    refetchInterval: (query) =>
+      query.state.data?.status &&
+      ACTIVE_PREPROCESSING_STATUSES.has(query.state.data.status)
+        ? 5000
+        : false,
+  })
   const [draftSelections, setDraftSelections] = useState<DatasetSelectionMap>(
     createEmptySelectionMap
   )
@@ -176,6 +223,11 @@ export function DatasetsSection({
   const [isSavingSelection, setIsSavingSelection] = useState(false)
   const [isHistoryOpen, setIsHistoryOpen] = useState(false)
   const [historyPage, setHistoryPage] = useState(1)
+  const [isStartingPreprocessing, setIsStartingPreprocessing] = useState(false)
+  const [isReleasingLocks, setIsReleasingLocks] = useState(false)
+  const [lockConflict, setLockConflict] =
+    useState<LockedPartitionsConflict | null>(null)
+  const pendingRetryRef = useRef<(() => void | Promise<void>) | null>(null)
 
   const canUpload = rbac.can(Permission.UploadFiles)
   const canDownload = rbac.can(Permission.DownloadFiles)
@@ -235,6 +287,15 @@ export function DatasetsSection({
     [draftSelections, datasetsByType, savedSelections]
   )
   const hasSelectionChanges = changedSelections.length > 0
+  const allTypesSelected = datasetOptions.every(
+    (option) => savedSelections[option.value] !== ""
+  )
+  const preprocessingActive = Boolean(
+    preprocessingQuery.data?.status &&
+    ACTIVE_PREPROCESSING_STATUSES.has(preprocessingQuery.data.status)
+  )
+  const showStartPreprocessing =
+    canEdit && allTypesSelected && !hasSelectionChanges
 
   useEffect(() => {
     setDraftSelections(savedSelections)
@@ -366,32 +427,125 @@ export function DatasetsSection({
     setIsSavingSelection(true)
 
     try {
-      await Promise.all(
-        changedSelections.map((change) =>
-          DatasetApi.updateDataset(caseId, change.next.id, {
-            is_selected: true,
-          })
-        )
+      // One atomic call for the whole combination — the backend selects each
+      // changed dataset and dispatches case preprocessing exactly once.
+      const payload = changedSelections.reduce<SelectCaseDatasetsPayload>(
+        (body, change) => ({
+          ...body,
+          [selectionPayloadFields[change.type]]: change.next.id,
+        }),
+        {}
       )
+      const response = await DatasetApi.selectDatasets(caseId, payload)
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["case-datasets", caseId] }),
         queryClient.invalidateQueries({
           queryKey: ["case-partitions", caseId],
         }),
+        queryClient.invalidateQueries({
+          queryKey: ["preprocessing-status", caseId],
+        }),
       ])
       setIsConfirmingSelection(false)
-      showToast("Dataset set updated", "success", {
-        description: "Active dataset selection has been saved.",
-      })
+      if (response.status === "FAILED") {
+        showToast("Preprocessing could not start", "error", {
+          description:
+            response.detail ??
+            "Dataset selection was saved but preprocessing failed to start.",
+        })
+      } else {
+        showToast("Dataset set updated", "success", {
+          description:
+            response.status === "READY"
+              ? "Datasets are already prepared for compute."
+              : "Preparing datasets for compute…",
+        })
+      }
     } catch (selectionError) {
-      showToast("Update failed", "error", {
-        description:
-          selectionError instanceof Error
-            ? selectionError.message
-            : "Dataset selections could not be saved.",
-      })
+      const conflict = extractLockedPartitionsConflict(selectionError)
+      if (conflict) {
+        pendingRetryRef.current = () => void handleConfirmSelectionSave()
+        setLockConflict(conflict)
+      } else {
+        showToast("Update failed", "error", {
+          description:
+            selectionError instanceof Error
+              ? selectionError.message
+              : "Dataset selections could not be saved.",
+        })
+      }
     } finally {
       setIsSavingSelection(false)
+    }
+  }
+
+  async function handleStartPreprocessing() {
+    setIsStartingPreprocessing(true)
+
+    try {
+      const response = await CaseApi.runPreprocessing(caseId)
+      await queryClient.invalidateQueries({
+        queryKey: ["preprocessing-status", caseId],
+      })
+      if (response.status === "FAILED") {
+        showToast("Preprocessing could not start", "error", {
+          description: response.detail ?? "Could not start preprocessing.",
+        })
+      } else {
+        showToast(
+          response.status === "READY"
+            ? "Datasets already prepared"
+            : "Preprocessing started",
+          "success",
+          {
+            description:
+              response.status === "READY"
+                ? "This dataset combination is already prepared for compute."
+                : "Preparing datasets for compute…",
+          }
+        )
+      }
+    } catch (startError) {
+      const conflict = extractLockedPartitionsConflict(startError)
+      if (conflict) {
+        pendingRetryRef.current = () => void handleStartPreprocessing()
+        setLockConflict(conflict)
+      } else {
+        showToast("Could not start preprocessing", "error", {
+          description:
+            startError instanceof Error
+              ? startError.message
+              : "Preprocessing could not be started.",
+        })
+      }
+    } finally {
+      setIsStartingPreprocessing(false)
+    }
+  }
+
+  async function handleForceReleaseLocks() {
+    setIsReleasingLocks(true)
+
+    try {
+      const response = await CaseApi.releasePartitionLocks(caseId)
+      setLockConflict(null)
+      showToast("Partition locks released", "success", {
+        description: `Released ${response.released_count} partition lock${
+          response.released_count === 1 ? "" : "s"
+        }.`,
+      })
+      const retry = pendingRetryRef.current
+      pendingRetryRef.current = null
+      await retry?.()
+    } catch (releaseError) {
+      showToast("Could not release locks", "error", {
+        description:
+          releaseError instanceof Error
+            ? releaseError.message
+            : "Partition locks could not be released.",
+      })
+    } finally {
+      setIsReleasingLocks(false)
     }
   }
 
@@ -399,9 +553,12 @@ export function DatasetsSection({
     <section className="flex flex-col gap-3">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <p className="text-[10px] font-medium tracking-[0.14em] uppercase">
-            Active Datasets
-          </p>
+          <div className="flex items-center gap-2">
+            <p className="text-[10px] font-medium tracking-[0.14em] uppercase">
+              Active Datasets
+            </p>
+            <PreprocessingStatusChip status={preprocessingQuery.data?.status} />
+          </div>
           <h2 className="text-sm text-muted-foreground">
             Drag and drop files in the respective slots to upload the datasets
           </h2>
@@ -437,7 +594,29 @@ export function DatasetsSection({
               </Button>
             </>
           ) : (
-            <div className="flex items-center">
+            <div className="flex items-center gap-1">
+              {showStartPreprocessing ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="rounded-none"
+                  disabled={isStartingPreprocessing || preprocessingActive}
+                  title={
+                    preprocessingActive
+                      ? "Preprocessing is already in progress"
+                      : undefined
+                  }
+                  onClick={() => void handleStartPreprocessing()}
+                >
+                  {isStartingPreprocessing || preprocessingActive ? (
+                    <Spinner data-icon="inline-start" />
+                  ) : (
+                    <PlayIcon data-icon="inline-start" />
+                  )}
+                  Start Preprocessing
+                </Button>
+              ) : null}
               <Button
                 variant="ghost"
                 size="sm"
@@ -556,10 +735,15 @@ export function DatasetsSection({
           </DialogHeader>
 
           <div className="flex items-start gap-2.5 rounded-lg border border-amber-500/15 bg-amber-500/5 p-3 text-xs">
-            <AlertTriangleIcon className="size-4 shrink-0 mt-0.5 text-amber-600 dark:text-amber-500" aria-hidden="true" />
+            <AlertTriangleIcon
+              className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-500"
+              aria-hidden="true"
+            />
             <div>
-              <div className="font-semibold text-foreground">Downstream outputs may change</div>
-              <div className="text-muted-foreground mt-0.5">
+              <div className="font-semibold text-foreground">
+                Downstream outputs may change
+              </div>
+              <div className="mt-0.5 text-muted-foreground">
                 {partitionCount === null
                   ? "Partitions will refresh against the newly selected dataset versions."
                   : `${partitionCount} partition${
@@ -596,6 +780,72 @@ export function DatasetsSection({
               )}
               Save
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(lockConflict)}
+        onOpenChange={(open) => {
+          if (!open && !isReleasingLocks) {
+            setLockConflict(null)
+            pendingRetryRef.current = null
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Partitions are being edited</DialogTitle>
+            <DialogDescription>{lockConflict?.detail}</DialogDescription>
+          </DialogHeader>
+
+          <div className="flex flex-col gap-1.5 py-1">
+            {lockConflict?.locked_partitions.map((partition) => (
+              <div
+                key={partition.id}
+                className="flex items-center justify-between gap-4 py-1.5 text-xs"
+              >
+                <span className="flex items-center gap-1.5 font-medium text-foreground">
+                  <LockIcon
+                    className="size-3.5 text-muted-foreground"
+                    aria-hidden="true"
+                  />
+                  {partition.name}
+                </span>
+                <span className="rounded bg-muted/65 px-2 py-0.5 font-mono text-muted-foreground">
+                  {partition.locked_by}
+                </span>
+              </div>
+            ))}
+          </div>
+
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={isReleasingLocks}
+              onClick={() => {
+                setLockConflict(null)
+                pendingRetryRef.current = null
+              }}
+            >
+              {canManageCaseLocks ? "Cancel" : "Close"}
+            </Button>
+            {canManageCaseLocks ? (
+              <Button
+                type="button"
+                variant="destructive"
+                disabled={isReleasingLocks}
+                onClick={() => void handleForceReleaseLocks()}
+              >
+                {isReleasingLocks ? (
+                  <Spinner data-icon="inline-start" />
+                ) : (
+                  <LockIcon data-icon="inline-start" />
+                )}
+                Force release &amp; retry
+              </Button>
+            ) : null}
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -1145,6 +1395,39 @@ function DatasetSlot({
   )
 }
 
+function PreprocessingStatusChip({ status }: { status?: string | null }) {
+  if (!status || status === "NOT_FOUND") return null
+
+  if (ACTIVE_PREPROCESSING_STATUSES.has(status)) {
+    return (
+      <Badge variant="outline" className="rounded-none text-muted-foreground">
+        <Spinner data-icon="inline-start" aria-hidden="true" />
+        Preparing datasets…
+      </Badge>
+    )
+  }
+  if (status === "READY") {
+    return (
+      <Badge
+        variant="outline"
+        className="rounded-none text-emerald-600 dark:text-emerald-400"
+      >
+        <Check data-icon="inline-start" aria-hidden="true" />
+        Datasets ready
+      </Badge>
+    )
+  }
+  if (status === "FAILED") {
+    return (
+      <Badge variant="outline" className="rounded-none text-destructive">
+        <AlertTriangleIcon data-icon="inline-start" aria-hidden="true" />
+        Preprocessing failed
+      </Badge>
+    )
+  }
+  return null
+}
+
 function UploadControl({
   canUpload,
   isUploading,
@@ -1226,8 +1509,9 @@ function DatasetChangeLine({ change }: { change: DatasetSelectionChange }) {
   return (
     <div className="flex items-center justify-between gap-4 py-1.5 text-xs">
       <span className="font-medium text-foreground">{change.label}</span>
-      <span className="text-muted-foreground font-mono bg-muted/65 px-2 py-0.5 rounded">
-        {change.previous ? `v${change.previous.version}` : "None"} &rarr; v{change.next.version}
+      <span className="rounded bg-muted/65 px-2 py-0.5 font-mono text-muted-foreground">
+        {change.previous ? `v${change.previous.version}` : "None"} &rarr; v
+        {change.next.version}
       </span>
     </div>
   )

@@ -1,12 +1,28 @@
 import { useState, useMemo } from "react"
 import { Link, createFileRoute } from "@tanstack/react-router"
 import { useQuery } from "@tanstack/react-query"
-import { ArrowLeftIcon, PlusIcon, RefreshCwIcon, SearchIcon } from "lucide-react"
+import {
+  ArrowLeftIcon,
+  PlusIcon,
+  RefreshCwIcon,
+  SearchIcon,
+} from "lucide-react"
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Avatar, AvatarFallback, AvatarImage, AvatarGroup } from "@/components/ui/avatar"
+import {
+  Avatar,
+  AvatarFallback,
+  AvatarImage,
+  AvatarGroup,
+} from "@/components/ui/avatar"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 import {
   CaseDetailSkeleton,
   PartitionsEmpty,
@@ -14,7 +30,7 @@ import {
   PartitionsTable,
 } from "@/components/features/partitions"
 import { DatasetsSection } from "@/components/features/cases"
-import { CaseApi, DatasetApi, PartitionApi } from "@/core/api"
+import { ApiError, CaseApi, DatasetApi, PartitionApi } from "@/core/api"
 import { formatDate } from "@/lib/format"
 import { Permission, RequirePermission } from "@/core/rbac"
 
@@ -64,6 +80,26 @@ function CaseDetailWorkspace() {
     queryKey: ["case-datasets", caseId],
     queryFn: () => DatasetApi.listDatasets(caseId),
   })
+  const preprocessingQuery = useQuery({
+    queryKey: ["preprocessing-status", caseId],
+    queryFn: async () => {
+      try {
+        return await CaseApi.getPreprocessingStatus(caseId)
+      } catch (statusError) {
+        if (statusError instanceof ApiError && statusError.status === 404) {
+          return null
+        }
+        throw statusError
+      }
+    },
+    retry: false,
+    refetchInterval: (query) => {
+      const status = query.state.data?.status
+      return status === "PENDING" || status === "QUEUED" || status === "RUNNING"
+        ? 5000
+        : false
+    },
+  })
 
   const [searchQuery, setSearchQuery] = useState("")
 
@@ -102,6 +138,13 @@ function CaseDetailWorkspace() {
   }
 
   const caseItem = caseQuery.data
+  const isCaseReady = preprocessingQuery.data?.status === "READY"
+  const canCreatePartitionNow = caseItem.can_create_partitions && isCaseReady
+  const newPartitionDisabledReason = !caseItem.can_create_partitions
+    ? null
+    : !isCaseReady
+      ? "Datasets must finish preprocessing before creating a partition."
+      : null
 
   return (
     <div className="flex flex-col gap-7">
@@ -126,12 +169,22 @@ function CaseDetailWorkspace() {
                 <div className="shrink-0">
                   <AvatarGroup>
                     {caseItem.assignments.map((assignment) => (
-                      <Avatar key={assignment.user.id} size="sm" title={`${assignment.user.display_name} (${assignment.role})`}>
+                      <Avatar
+                        key={assignment.user.id}
+                        size="sm"
+                        title={`${assignment.user.display_name} (${assignment.role})`}
+                      >
                         {assignment.user.image ? (
-                          <AvatarImage src={assignment.user.image} alt={assignment.user.display_name} />
+                          <AvatarImage
+                            src={assignment.user.image}
+                            alt={assignment.user.display_name}
+                          />
                         ) : null}
                         <AvatarFallback>
-                          {getInitials(assignment.user.display_name, assignment.user.email)}
+                          {getInitials(
+                            assignment.user.display_name,
+                            assignment.user.email
+                          )}
                         </AvatarFallback>
                       </Avatar>
                     ))}
@@ -141,13 +194,13 @@ function CaseDetailWorkspace() {
             </div>
 
             {caseItem.description ? (
-              <p className="text-sm text-muted-foreground whitespace-pre-wrap leading-relaxed max-w-2xl">
+              <p className="max-w-2xl text-sm leading-relaxed whitespace-pre-wrap text-muted-foreground">
                 {caseItem.description}
               </p>
             ) : null}
           </div>
 
-          <dl className="grid w-full grid-cols-2 gap-x-6 gap-y-3 lg:w-auto lg:grid-cols-4 lg:gap-x-10 lg:shrink-0">
+          <dl className="grid w-full grid-cols-2 gap-x-6 gap-y-3 lg:w-auto lg:shrink-0 lg:grid-cols-4 lg:gap-x-10">
             <CaseMeta label="Code" value={caseItem.code || "—"} />
             <CaseMeta label="Methodology" value={caseItem.methodology || "—"} />
             <CaseMeta label="Category" value={caseItem.category || "—"} />
@@ -185,6 +238,7 @@ function CaseDetailWorkspace() {
           datasetsQuery.error instanceof Error ? datasetsQuery.error : null
         }
         partitionCount={partitionsQuery.data?.length ?? null}
+        canManageCaseLocks={caseItem.can_manage_case_locks}
         onRetry={() => void datasetsQuery.refetch()}
       />
 
@@ -202,21 +256,48 @@ function CaseDetailWorkspace() {
                 placeholder="Search partitions..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="h-8 rounded-none border-0 border-b border-border bg-transparent pl-9 text-sm placeholder:text-muted-foreground/60 transition-colors focus-visible:border-primary focus-visible:ring-0 focus-visible:ring-offset-0 w-full sm:w-64"
+                className="h-8 w-full rounded-none border-0 border-b border-border bg-transparent pl-9 text-sm transition-colors placeholder:text-muted-foreground/60 focus-visible:border-primary focus-visible:ring-0 focus-visible:ring-offset-0 sm:w-64"
                 aria-label="Search partitions"
               />
             </div>
             {caseItem.can_create_partitions ? (
-              <Button
-                size="sm"
-                className="shrink-0"
-                render={
-                  <Link to="/cases/$caseId/partitions/new" params={{ caseId }} />
-                }
-              >
-                <PlusIcon data-icon="inline-start" />
-                New partition
-              </Button>
+              newPartitionDisabledReason ? (
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger
+                      render={
+                        <span className="inline-block shrink-0 cursor-not-allowed">
+                          <Button
+                            size="sm"
+                            className="pointer-events-none"
+                            disabled
+                          >
+                            <PlusIcon data-icon="inline-start" />
+                            New partition
+                          </Button>
+                        </span>
+                      }
+                    />
+                    <TooltipContent>
+                      {newPartitionDisabledReason}
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              ) : (
+                <Button
+                  size="sm"
+                  className="shrink-0"
+                  render={
+                    <Link
+                      to="/cases/$caseId/partitions/new"
+                      params={{ caseId }}
+                    />
+                  }
+                >
+                  <PlusIcon data-icon="inline-start" />
+                  New partition
+                </Button>
+              )
             ) : null}
           </div>
         </div>
@@ -226,10 +307,7 @@ function CaseDetailWorkspace() {
         {!partitionsQuery.isLoading &&
         !partitionsQuery.error &&
         partitionsQuery.data?.length === 0 ? (
-          <PartitionsEmpty
-            caseId={caseId}
-            canCreate={caseItem.can_create_partitions}
-          />
+          <PartitionsEmpty caseId={caseId} canCreate={canCreatePartitionNow} />
         ) : null}
 
         {!partitionsQuery.isLoading &&
@@ -245,7 +323,7 @@ function CaseDetailWorkspace() {
         partitionsQuery.data &&
         partitionsQuery.data.length > 0 &&
         filteredPartitions.length === 0 ? (
-          <div className="flex flex-col items-center justify-center p-8 border border-dashed rounded text-center text-muted-foreground text-sm">
+          <div className="flex flex-col items-center justify-center rounded border border-dashed p-8 text-center text-sm text-muted-foreground">
             No partitions match "{searchQuery}"
           </div>
         ) : null}

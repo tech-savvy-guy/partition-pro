@@ -124,7 +124,15 @@ CELERY_WORKER_HIJACK_ROOT_LOGGER = False
 CELERY_TASK_DEFAULT_QUEUE = "default"
 CELERY_TASK_ROUTES = {
     "core.tasks.compute_visualization_task": {"queue": "visualization"},
+    "core.tasks.compute_roi_task": {"queue": "roi"},
+    "core.tasks.compute_node_testing_task": {"queue": "roi"},
+    "core.tasks.compute_obm_task": {"queue": "roi"},
+    "core.tasks.preprocess_case_task": {"queue": "preprocess"},
 }
+
+# Partition edit-lock TTL (seconds). PartitionLockView acquires/renews with
+# this window; a lock past its expiry is treated as free.
+LOCK_TTL_SECONDS = int(os.getenv("LOCK_TTL_SECONDS", "600"))
 
 CACHES = {
     "default": {

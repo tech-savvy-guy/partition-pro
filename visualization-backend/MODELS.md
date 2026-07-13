@@ -187,6 +187,62 @@ Relationships:
 Constraints and indexes:
 - Indexes: `(partition_id, -started_at)`, `(partition_id, status)`, `status`
 
+## `core.metadata`
+
+Model: `core.Metadata`
+
+One row per (case, dataset-combination signature). Holds the full-panel ROI
+matrix directly as nested JSONB — no child row tables. A signature's row is
+never deleted once created: re-selecting a previously-computed dataset
+combination reuses it instantly instead of recomputing (see
+`core.services.preprocessing.build.run_preprocessing`). Its `id` is the
+`_metadata_id` argument to the `core.get_roi_matrix_rows_by_skuname` stored
+function.
+
+```json
+{
+  "id": "uuid",
+  "case_id": "uuid",
+  "pos_dataset_id": "uuid | null",
+  "att_dataset_id": "uuid | null",
+  "cp_dataset_id": "uuid | null",
+  "signature": "string",
+  "status": "pending | running | ready | failed",
+  "base": "float | null",
+  "sku_count": "integer",
+  "row_max": {},
+  "avg_roi": {},
+  "roi_matrix": {},
+  "error": "string",
+  "tags": {},
+  "created_at": "datetime",
+  "updated_at": "datetime"
+}
+```
+
+Relationships:
+- `case_id` -> `core.cases`
+- `pos_dataset_id` / `att_dataset_id` / `cp_dataset_id` -> `core.datasets` (the
+  POS / ATTRIBUTES / CROSS_PURCHASE datasets the run was built from).
+
+Derived values:
+- `signature` is a sha256 of the case id + all three dataset id+version tuples;
+  selecting a different combination produces (or reuses) a different row.
+- `roi_matrix` is nested `{sku_l: {sku_r: roi}}` — the shape
+  `core.get_roi_matrix_rows_by_skuname`'s two-level `jsonb_each`/`jsonb_each_text`
+  unpivot reads.
+- `row_max` is `{sku: row_max}`, used to derive `abs_pen%` at read time
+  (`abs_pen% = row_max / base * 100`) without re-touching raw rows.
+- `avg_roi` is `{sku: full-panel mean ROI}` (the SKU's row mean in
+  `roi_matrix`, excluding the zero diagonal), persisted at preprocessing time
+  by `core/services/preprocessing/build.py` (field added in migration
+  `0029_add_avg_roi_to_metadata`) and read via `avg_roi_for_skus` — never
+  recomputed from a selection-filtered subset.
+
+Constraints and indexes:
+- Unique: `(case_id, signature)`
+- Indexes: `case_id`, `status`, `(case_id, status)`
+
 ## `security.refresh_token`
 
 Model: `security.RefreshToken`

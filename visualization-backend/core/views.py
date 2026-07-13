@@ -1,5 +1,6 @@
 import logging
 import re
+from datetime import timedelta
 
 from celery.result import AsyncResult
 from django.conf import settings
@@ -15,6 +16,7 @@ from core.models import (
     Case,
     CaseUserAssignment,
     Dataset,
+    Metadata,
     Partition,
     User,
     WorkflowRun,
@@ -30,6 +32,7 @@ from core.services.storage import (
 from core.services.case import (
     can_edit_workflow,
     can_create_partition,
+    can_manage_case_locks,
     create_case_assignments,
     get_active_case,
     get_active_dataset,
@@ -55,6 +58,21 @@ from core.services.visualization.workflow import (
     workflow_status_payload,
     workflow_visualization_payload,
 )
+from core.services.roi.progress import (
+    get_node_testing_progress,
+    get_roi_progress,
+    publish_node_testing_progress,
+)
+from core.services.preprocessing.progress import get_preprocessing_progress
+from core.services.preprocessing.guard import CaseNotReadyError, require_case_ready
+from core.services.preprocessing.read import metadata_for_current_selection_any_status
+from core.services.roi.workflow import (
+    latest_roi_run,
+    prepare_roi_workflow,
+    roi_run_for_task,
+    roi_status_payload,
+    workflow_roi_payload,
+)
 from core.services import workflow_store
 from core.services.partition_tree import (
     add_child,
@@ -72,7 +90,13 @@ from core.services.partition_tree import (
     save_graph,
     selectable_attributes,
 )
-from core.tasks import compute_visualization_task
+from core.tasks import (
+    compute_node_testing_task,
+    compute_obm_task,
+    compute_roi_task,
+    compute_visualization_task,
+    preprocess_case_task,
+)
 from core.services.users import (
     get_display_name,
     get_image_data_url,
@@ -283,6 +307,11 @@ class CasePartitionsView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
+        try:
+            require_case_ready(case_id)
+        except CaseNotReadyError as exc:
+            return _case_not_ready_response(exc)
+
         data = request.data or {}
         errors = validate_partition_payload(data, case)
         if errors:
@@ -369,12 +398,8 @@ class CaseDatasetDetailView(APIView):
                 dataset.status = clean_text(data.get("status"))
                 updated_fields.append("status")
 
-            if "is_selected" in data:
-                is_selected = bool(data.get("is_selected"))
-                if is_selected:
-                    dataset.status = Dataset.Status.PROCESSING
-                    updated_fields.append("status")
-                dataset.is_selected = is_selected
+            if "is_selected" in data and not should_ingest:
+                dataset.is_selected = False
                 updated_fields.append("is_selected")
 
             if "tags" in data:
@@ -387,7 +412,7 @@ class CaseDatasetDetailView(APIView):
 
         if should_ingest:
             try:
-                ingest_dataset(dataset)
+                _select_and_ingest_dataset(dataset)
             except DatasetIngestionError as exc:
                 return Response(
                     {
@@ -396,6 +421,10 @@ class CaseDatasetDetailView(APIView):
                     },
                     status=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 )
+            # Preprocessing is deliberately NOT triggered here — it's
+            # dispatched exactly once by the atomic CaseDatasetSelectionView,
+            # which replaces this per-dataset toggle as the "save selection"
+            # path.
 
         return Response(serialize_dataset(dataset))
 
@@ -507,6 +536,8 @@ class CaseDatasetUploadCompleteView(APIView):
                 },
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+
+        # Preprocessing is no longer triggered here — see CaseDatasetDetailView.patch.
 
         return Response(serialize_dataset(dataset))
 
@@ -672,6 +703,11 @@ class PartitionSkuSelectionView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
+        try:
+            require_case_ready(case_id)
+        except CaseNotReadyError as exc:
+            return _case_not_ready_response(exc)
+
         data = request.data or {}
         if not isinstance(data, dict):
             return Response(
@@ -763,6 +799,11 @@ class VisualizationRunView(APIView):
             )
 
         try:
+            require_case_ready(case_id)
+        except CaseNotReadyError as exc:
+            return _case_not_ready_response(exc)
+
+        try:
             task_params = build_visualization_task_params(request.data or {})
             decision = prepare_visualization_workflow(
                 partition=partition,
@@ -821,7 +862,7 @@ class VisualizationStatusView(APIView):
             if cached:
                 return Response(
                     cached,
-                    status=_visualization_response_status(cached.get("status")),
+                    status=_async_response_status(cached.get("status")),
                 )
         except Exception:
             pass
@@ -854,7 +895,7 @@ class VisualizationStatusView(APIView):
         if workflow is not None:
             return Response(
                 workflow_status_payload(workflow, str(task_id)),
-                status=_visualization_response_status(workflow.status),
+                status=_async_response_status(workflow.status),
             )
 
         return Response(
@@ -981,12 +1022,235 @@ class VisualizationMdsMetricsView(APIView):
         )
 
 
+class RoiRunView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, case_id, partition_id):
+        case = get_active_case(case_id)
+        if case is None:
+            return Response(
+                {"detail": "Case not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        partition = get_active_partition(case, partition_id)
+        if partition is None:
+            return Response(
+                {"detail": "Partition not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        if not can_edit_workflow(request.user, case):
+            return Response(
+                {"detail": "User cannot run ROI for this case."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        try:
+            require_case_ready(case_id)
+        except CaseNotReadyError as exc:
+            return _case_not_ready_response(exc)
+
+        try:
+            task_params = build_roi_task_params(request.data or {})
+            decision = prepare_roi_workflow(
+                partition=partition,
+                user=request.user,
+                task_params=task_params,
+            )
+        except ValueError as exc:
+            return Response(
+                {"detail": str(exc)},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        polling_url = (
+            f"/api/cases/{case_id}/partitions/{partition_id}/roi/status/{decision.task_id}/"
+        )
+        if not decision.should_enqueue:
+            payload = roi_status_payload(decision.workflow, decision.task_id)
+            payload["polling_url"] = polling_url
+            response_status = (
+                status.HTTP_200_OK
+                if decision.reused_completed_result
+                else status.HTTP_202_ACCEPTED
+            )
+            return Response(payload, status=response_status)
+
+        task = compute_roi_task.apply_async(
+            args=[str(decision.workflow.id)],
+            task_id=decision.task_id,
+            queue="roi",
+        )
+        return Response(
+            {
+                "status": "QUEUED",
+                "task_id": task.id,
+                "workflow_run_id": str(decision.workflow.id),
+                "polling_url": (
+                    f"/api/cases/{case_id}/partitions/{partition_id}/roi/status/{task.id}/"
+                ),
+            },
+            status=status.HTTP_202_ACCEPTED,
+        )
+
+
+class RoiStatusView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, case_id, partition_id, task_id):
+        try:
+            cached = get_roi_progress(str(case_id), str(partition_id), str(task_id))
+            if cached:
+                return Response(
+                    cached,
+                    status=_async_response_status(cached.get("status")),
+                )
+        except Exception:
+            pass
+
+        try:
+            task_result = AsyncResult(str(task_id))
+            if task_result.ready():
+                if task_result.successful():
+                    result = task_result.result or {}
+                    return Response(
+                        {
+                            "status": result.get("status", "COMPLETED"),
+                            "task_id": str(task_id),
+                            "result": result.get("result"),
+                        },
+                        status=status.HTTP_200_OK,
+                    )
+                return Response(
+                    {
+                        "status": "FAILED",
+                        "task_id": str(task_id),
+                        "error": str(task_result.info),
+                    },
+                    status=status.HTTP_200_OK,
+                )
+        except Exception:
+            pass
+
+        workflow = roi_run_for_task(case_id, partition_id, str(task_id))
+        if workflow is not None:
+            return Response(
+                roi_status_payload(workflow, str(task_id)),
+                status=_async_response_status((workflow.tags or {}).get("roi_status")),
+            )
+
+        return Response(
+            {"status": "RUNNING", "task_id": str(task_id)},
+            status=status.HTTP_202_ACCEPTED,
+        )
+
+
+class RoiLatestView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, case_id, partition_id):
+        case = get_active_case(case_id)
+        if case is None:
+            return Response(
+                {"detail": "Case not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        partition = get_active_partition(case, partition_id)
+        if partition is None:
+            return Response(
+                {"detail": "Partition not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        workflow = latest_roi_run(partition.id)
+        if workflow is None or workflow_roi_payload(workflow) is None:
+            return Response(
+                {
+                    "status": "NOT_FOUND",
+                    "case_id": str(case_id),
+                    "partition_id": str(partition_id),
+                    "message": "No ROI result found for this partition",
+                },
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        return Response(
+            {
+                "status": (workflow.tags or {}).get("roi_status", "").upper(),
+                "case_id": str(case_id),
+                "partition_id": str(partition_id),
+                "workflow_run_id": str(workflow.id),
+                "result": workflow_roi_payload(workflow),
+                "updated_on": (
+                    (workflow.tags or {}).get("roi_finished_at")
+                    or (workflow.tags or {}).get("roi_started_at")
+                    or workflow.started_at.isoformat()
+                ),
+            },
+            status=status.HTTP_200_OK,
+        )
+
+
+class PreprocessingStatusView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, case_id):
+        case = get_active_case(case_id)
+        if case is None:
+            return Response(
+                {"detail": "Case not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        try:
+            cached = get_preprocessing_progress(str(case_id))
+            if cached:
+                return Response(
+                    cached,
+                    status=_async_response_status(cached.get("status")),
+                )
+        except Exception:
+            pass
+
+        metadata = metadata_for_current_selection_any_status(case_id)
+        if metadata is None:
+            return Response(
+                {"status": "NOT_FOUND", "case_id": str(case_id)},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        return Response(
+            {
+                "status": metadata.status.upper(),
+                "case_id": str(case_id),
+                "metadata_id": str(metadata.id),
+                "sku_count": metadata.sku_count,
+                "error": metadata.error,
+                "updated_on": metadata.updated_at.isoformat(),
+            },
+            status=_async_response_status(metadata.status),
+        )
+
+
 def _workflow_data(workflow) -> dict:
-    """The two-key workflow result exposed to the frontend."""
+    """The unified workflow result exposed to the frontend."""
     result = workflow.result or {}
+    tags = workflow.tags or {}
+    obm = result.get(workflow_store.OBM_KEY)
     return {
         "visualization": result.get(workflow_store.VISUALIZATION_KEY),
         "partition_tree": result.get(workflow_store.PARTITION_TREE_KEY),
+        "sku_math": result.get(workflow_store.SKU_MATH_KEY),
+        "obm": obm,
+        "level_testing": result.get(workflow_store.LEVEL_TESTING_KEY),
+        "coverage": result.get(workflow_store.COVERAGE_KEY),
+        # The tree dialog polls this step to know when a queued OBM recompute
+        # (triggered by a tree mutation) has landed.
+        "partition_obm": {
+            "status": tags.get("obm_status"),
+            "result": {"obm_holds": (obm or {}).get("obm_holds")},
+        },
     }
 
 
@@ -1101,9 +1365,121 @@ class PartitionTreeAttributeSelectionView(APIView):
         return Response(payload, status=status.HTTP_200_OK)
 
 
+class PartitionWorkflowProcessRunView(APIView):
+    """POST ``workflow/<process_name>/run/`` — the partition-tree dialog's
+    "Submit attribute selection" action (``process_partition_tree``): queues
+    per-node Base/Level Testing for the submitted attributes; the dialog then
+    polls the node (GET ``partition-tree/nodes/<id>/``) for results."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, case_id, partition_id, process_name):
+        if process_name != "process_partition_tree":
+            return Response(
+                {"detail": f"Unknown workflow process '{process_name}'."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        case = get_active_case(case_id)
+        if case is None:
+            return Response({"detail": "Case not found."}, status=status.HTTP_404_NOT_FOUND)
+        partition = get_active_partition(case, partition_id)
+        if partition is None:
+            return Response({"detail": "Partition not found."}, status=status.HTTP_404_NOT_FOUND)
+        if not can_edit_workflow(request.user, case):
+            return Response(
+                {"detail": "User cannot run the partition-tree workflow for this case."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        try:
+            require_case_ready(case_id)
+        except CaseNotReadyError as exc:
+            return _case_not_ready_response(exc)
+
+        params = request.data or {}
+        node_obj = params.get("node_obj") or {}
+        node_id = str(node_obj.get("id") or "").strip()
+        if not node_id:
+            return Response(
+                {"detail": "node_obj.id is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        attributes = _selected_attributes_from_attrs_list(params.get("attrs_list"))
+        if not attributes:
+            return Response(
+                {"detail": "Select at least one attribute to test."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        workflow, graph = get_or_seed_graph(partition, user=request.user)
+        if find_node(list(graph.get("nodes") or []), node_id) is None:
+            return Response(
+                {"detail": f"node_id={node_id} not found."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Seed both the persisted key and the Redis progress cache so a poll
+        # that lands before the worker picks the task up sees QUEUED.
+        workflow_store.set_node_testing(
+            workflow,
+            {
+                "node_id": node_id,
+                "status": "queued",
+                "updated_on": timezone.now().isoformat(),
+            },
+        )
+        workflow.save(update_fields=["result"])
+
+        task = compute_node_testing_task.apply_async(
+            args=[str(workflow.id), node_id, attributes],
+            queue="roi",
+        )
+        try:
+            publish_node_testing_progress(
+                str(case_id),
+                str(partition_id),
+                node_id,
+                {"status": "QUEUED", "node_id": node_id, "percent": 0.0},
+            )
+        except Exception:
+            pass
+
+        return Response(
+            {"status": "QUEUED", "task_id": str(task.id), "node_id": node_id},
+            status=status.HTTP_202_ACCEPTED,
+        )
+
+
+def _selected_attributes_from_attrs_list(attrs_list) -> list[str]:
+    """Extract the checked attribute names from the Attribute Selection tab's
+    submit payload: ``{columns: ["is_selected", "attribute_name", ...],
+    rows: [[bool, name, ...], ...]}``."""
+    if not isinstance(attrs_list, dict):
+        return []
+    columns = [str(c) for c in (attrs_list.get("columns") or [])]
+    rows = attrs_list.get("rows") or []
+    try:
+        selected_index = columns.index("is_selected")
+        name_index = columns.index("attribute_name")
+    except ValueError:
+        return []
+
+    out: list[str] = []
+    for row in rows:
+        if not isinstance(row, list) or len(row) <= max(selected_index, name_index):
+            continue
+        if row[selected_index] and str(row[name_index] or "").strip():
+            out.append(str(row[name_index]).strip())
+    return out
+
+
 class PartitionTreeNodeView(APIView):
     """POST expands a node into an attribute node + value children;
     DELETE clears a node's children. Persists the updated flat graph synchronously.
+    GET polls the node's Base/Level Testing run (Redis progress first, then
+    the persisted ``node_testing`` result).
     """
 
     permission_classes = [IsAuthenticated]
@@ -1129,6 +1505,11 @@ class PartitionTreeNodeView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
+        try:
+            require_case_ready(case_id)
+        except CaseNotReadyError as exc:
+            return _case_not_ready_response(exc)
+
         workflow, graph = get_or_seed_graph(partition, user=request.user)
         nodes = list(graph.get("nodes") or [])
         node = find_node(nodes, node_id)
@@ -1138,6 +1519,49 @@ class PartitionTreeNodeView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
         return partition, workflow, nodes, node
+
+    def get(self, request, case_id, partition_id, node_id):
+        case = get_active_case(case_id)
+        if case is None:
+            return Response({"detail": "Case not found."}, status=status.HTTP_404_NOT_FOUND)
+        partition = get_active_partition(case, partition_id)
+        if partition is None:
+            return Response({"detail": "Partition not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        node_id = str(node_id)
+        try:
+            cached = get_node_testing_progress(str(case_id), str(partition_id), node_id)
+            if cached:
+                return Response(
+                    cached, status=_async_response_status(cached.get("status"))
+                )
+        except Exception:
+            pass
+
+        workflow = workflow_store.get_partition_workflow(partition)
+        stored = (
+            workflow_store.get_node_testing(workflow) if workflow is not None else None
+        )
+        if stored and str(stored.get("node_id")) == node_id:
+            stored_status = str(stored.get("status", "")).upper()
+            payload = {
+                "status": stored_status,
+                "node_id": node_id,
+                "percent": 100.0 if stored_status in {"COMPLETED", "FAILED"} else 0.0,
+            }
+            if stored_status == "COMPLETED":
+                payload["data"] = {
+                    "base_testing": stored.get("base_testing"),
+                    "level_testing": stored.get("level_testing"),
+                }
+            if stored.get("error"):
+                payload["error"] = stored.get("error")
+            return Response(payload, status=_async_response_status(stored_status))
+
+        return Response(
+            {"status": "NOT_FOUND", "node_id": node_id},
+            status=status.HTTP_200_OK,
+        )
 
     def post(self, request, case_id, partition_id, node_id):
         attribute_name = ((request.data or {}).get("attribute_name") or "").strip()
@@ -1192,8 +1616,14 @@ class PartitionTreeNodeView(APIView):
             nodes = add_child(nodes, attr_node, value_node)
 
         save_graph(workflow, nodes)
+        obm_task_id = _dispatch_obm_recompute(workflow)
         return Response(
-            {"success": True, "data": _workflow_data(workflow), "status": "COMPLETED"},
+            {
+                "success": True,
+                "data": _workflow_data(workflow),
+                "status": "COMPLETED",
+                "obm_task_id": obm_task_id,
+            },
             status=status.HTTP_200_OK,
         )
 
@@ -1215,10 +1645,40 @@ class PartitionTreeNodeView(APIView):
             )
 
         save_graph(workflow, new_nodes)
+        obm_task_id = _dispatch_obm_recompute(workflow)
         return Response(
-            {"success": True, "data": _workflow_data(workflow), "status": "COMPLETED"},
+            {
+                "success": True,
+                "data": _workflow_data(workflow),
+                "status": "COMPLETED",
+                "task_id": obm_task_id,
+            },
             status=status.HTTP_200_OK,
         )
+
+
+def _dispatch_obm_recompute(workflow) -> str | None:
+    """Queue an OBM recompute after a tree mutation (the tree's value leaves
+    define the OBM matrix — mirrors roi-backend's ``compute_obm`` dispatch).
+    Marks ``tags.obm_status = queued`` first so the mutation response's
+    ``partition_obm`` block already reflects the pending recompute."""
+    tags = dict(workflow.tags or {})
+    tags["obm_status"] = "queued"
+    tags["obm_error"] = ""
+    workflow.tags = tags
+    workflow.save(update_fields=["tags"])
+
+    try:
+        task = compute_obm_task.apply_async(args=[str(workflow.id)], queue="roi")
+        return str(task.id)
+    except Exception:
+        logger.exception("Failed to enqueue OBM recompute for workflow %s", workflow.id)
+        tags = dict(workflow.tags or {})
+        tags["obm_status"] = "failed"
+        tags["obm_error"] = "Could not queue the OBM recompute."
+        workflow.tags = tags
+        workflow.save(update_fields=["tags"])
+        return None
 
 
 _HEX_COLOR_RE = re.compile(r"^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$")
@@ -1338,6 +1798,292 @@ DATASET_UPDATE_FIELDS = {
 }
 
 
+DATASET_SELECTION_FIELD_TYPES = {
+    "pos_dataset_id": Dataset.Type.POS,
+    "attributes_dataset_id": Dataset.Type.ATTRIBUTES,
+    "cross_purchase_dataset_id": Dataset.Type.CROSS_PURCHASE,
+}
+
+
+class CaseDatasetSelectionView(APIView):
+    """Atomically confirm a case's POS/ATTRIBUTES/CROSSPURCHASE dataset
+    combination and dispatch preprocessing exactly once (or skip dispatch
+    entirely if that combination is already READY/RUNNING) — replaces firing
+    one independent PATCH per changed dataset type."""
+
+    permission_classes = [HasPermission(Permission.EDIT_DATASETS.value)]
+
+    def post(self, request, case_id):
+        case = get_active_case(case_id)
+        if case is None:
+            return Response(
+                {"detail": "Case not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        if not can_edit_workflow(request.user, case):
+            return Response(
+                {"detail": "User cannot change datasets for this case."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        data = request.data or {}
+        if not isinstance(data, dict):
+            return Response(
+                {"detail": "Payload must be a JSON object."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        locked_partitions = _locked_partitions_summary(case.id)
+        if locked_partitions:
+            return Response(
+                {
+                    "detail": (
+                        f"{len(locked_partitions)} partition(s) are currently being "
+                        "edited; cannot change datasets until they're released."
+                    ),
+                    "locked_partitions": locked_partitions,
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        try:
+            with transaction.atomic():
+                for field_name, dataset_type in DATASET_SELECTION_FIELD_TYPES.items():
+                    if field_name not in data or data.get(field_name) is None:
+                        continue
+                    dataset = get_active_dataset(case_id, data.get(field_name))
+                    if dataset is None or dataset.type != dataset_type:
+                        return Response(
+                            {"detail": f"Invalid {field_name}."},
+                            status=status.HTTP_400_BAD_REQUEST,
+                        )
+                    _select_and_ingest_dataset(dataset)
+        except DatasetIngestionError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        return Response(_dispatch_preprocessing(case.id), status=status.HTTP_202_ACCEPTED)
+
+
+def _case_not_ready_response(exc: CaseNotReadyError) -> Response:
+    return Response(
+        {"status": exc.status, "detail": exc.message},
+        status=status.HTTP_409_CONFLICT,
+    )
+
+
+def _locked_partitions_summary(case_id) -> list[dict]:
+    """Active (unexpired) locks on the case's partitions, newest-lock-first,
+    for surfacing in 409 conflict responses and the force-release action."""
+    return [
+        {
+            "id": str(partition.id),
+            "name": partition.name,
+            "locked_by": partition.locked_by_display_name,
+            "lock_expires_at": (
+                partition.lock_expires_at.isoformat() if partition.lock_expires_at else None
+            ),
+        }
+        for partition in Partition.objects.filter(
+            case_id=case_id,
+            locked_by__isnull=False,
+            lock_expires_at__gt=timezone.now(),
+        )
+        .select_related("locked_by")
+        .order_by("-lock_expires_at")
+    ]
+
+
+def _select_and_ingest_dataset(dataset) -> None:
+    """Flip ``is_selected`` on and (re-)ingest — the shared "select this
+    dataset version" step used by both the atomic selection endpoint and
+    (via ``CaseDatasetDetailView.patch``) the older per-dataset PATCH path."""
+    dataset.is_selected = True
+    dataset.status = Dataset.Status.PROCESSING
+    dataset.save(update_fields=["is_selected", "status", "updated_at"])
+    ingest_dataset(dataset)
+
+
+def _dispatch_preprocessing(case_id) -> dict:
+    """Enqueue ``preprocess_case_task`` for the case's current dataset
+    combination — unless that exact signature is already READY or RUNNING,
+    in which case return its status synchronously with no Celery dispatch
+    (this is the "preserve combinations" reuse behavior)."""
+    case_id = str(case_id)
+    existing = metadata_for_current_selection_any_status(case_id)
+    if existing is not None and existing.status in (
+        Metadata.Status.READY,
+        Metadata.Status.RUNNING,
+    ):
+        return {
+            "status": existing.status.upper(),
+            "case_id": case_id,
+            "metadata_id": str(existing.id),
+        }
+
+    try:
+        preprocess_case_task.apply_async(args=[case_id], queue="preprocess")
+    except Exception:
+        logger.exception("Failed to enqueue preprocessing for case %s", case_id)
+        return {"status": "FAILED", "case_id": case_id, "detail": "Could not start preprocessing."}
+
+    return {"status": "QUEUED", "case_id": case_id}
+
+
+class CasePreprocessingRunView(APIView):
+    """Explicitly (re-)dispatch preprocessing for the case's CURRENT dataset
+    selection — unlike ``CaseDatasetSelectionView``, this never touches
+    dataset selection or re-ingests anything. Covers two cases the atomic
+    selection endpoint can't: first-time setup (each dataset auto-selects
+    itself on upload, so there's no selection diff to "save") and manually
+    re-triggering a stuck/failed run for the already-correct combination."""
+
+    permission_classes = [HasPermission(Permission.EDIT_DATASETS.value)]
+
+    def post(self, request, case_id):
+        case = get_active_case(case_id)
+        if case is None:
+            return Response({"detail": "Case not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        if not can_edit_workflow(request.user, case):
+            return Response(
+                {"detail": "User cannot start preprocessing for this case."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        locked_partitions = _locked_partitions_summary(case.id)
+        if locked_partitions:
+            return Response(
+                {
+                    "detail": (
+                        f"{len(locked_partitions)} partition(s) are currently being "
+                        "edited; cannot start preprocessing until they're released."
+                    ),
+                    "locked_partitions": locked_partitions,
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        return Response(_dispatch_preprocessing(case.id), status=status.HTTP_202_ACCEPTED)
+
+
+class CasePartitionLocksReleaseView(APIView):
+    """Force-release every active lock on the case's partitions. Restricted
+    to the case-level PUBLISHER (or a global admin/owner) — unblocks dataset
+    changes/preprocessing when other users have left partitions locked."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, case_id):
+        case = get_active_case(case_id)
+        if case is None:
+            return Response({"detail": "Case not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        if not can_manage_case_locks(request.user, case):
+            return Response(
+                {"detail": "Only a case publisher can release partition locks."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        released = _locked_partitions_summary(case.id)
+        if released:
+            with transaction.atomic():
+                Partition.objects.select_for_update().filter(
+                    id__in=[item["id"] for item in released]
+                ).update(locked_by=None, lock_expires_at=None, updated_at=timezone.now())
+
+        return Response(
+            {"released_count": len(released), "released_partitions": released},
+            status=status.HTTP_200_OK,
+        )
+
+
+class PartitionLockView(APIView):
+    """Acquire/renew or release a partition's edit lock.
+
+    Wires up the previously inert ``Partition.locked_by``/``lock_expires_at``
+    fields: dataset-selection changes (``CaseDatasetSelectionView``) refuse to
+    proceed while any partition under the case holds an active, unexpired
+    lock.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, case_id, partition_id):
+        case = get_active_case(case_id)
+        if case is None:
+            return Response({"detail": "Case not found."}, status=status.HTTP_404_NOT_FOUND)
+        partition = get_active_partition(case, partition_id)
+        if partition is None:
+            return Response({"detail": "Partition not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        now = timezone.now()
+        with transaction.atomic():
+            partition = Partition.objects.select_for_update().get(id=partition.id)
+            is_free = partition.locked_by_id is None or (
+                partition.lock_expires_at is not None and partition.lock_expires_at <= now
+            )
+            is_self = partition.locked_by_id == request.user.id
+            if not is_free and not is_self:
+                return Response(
+                    {
+                        "detail": "Partition is locked by another user.",
+                        "locked_by": partition.locked_by_display_name,
+                        "lock_expires_at": (
+                            partition.lock_expires_at.isoformat()
+                            if partition.lock_expires_at
+                            else None
+                        ),
+                    },
+                    status=status.HTTP_409_CONFLICT,
+                )
+
+            partition.locked_by = request.user
+            partition.lock_expires_at = now + timedelta(seconds=settings.LOCK_TTL_SECONDS)
+            partition.save(update_fields=["locked_by", "lock_expires_at", "updated_at"])
+
+        return Response(
+            {
+                "locked_by": partition.locked_by_display_name,
+                "lock_expires_at": partition.lock_expires_at.isoformat(),
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    def delete(self, request, case_id, partition_id):
+        case = get_active_case(case_id)
+        if case is None:
+            return Response({"detail": "Case not found."}, status=status.HTTP_404_NOT_FOUND)
+        partition = get_active_partition(case, partition_id)
+        if partition is None:
+            return Response({"detail": "Partition not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        with transaction.atomic():
+            partition = Partition.objects.select_for_update().get(id=partition.id)
+            if partition.locked_by_id not in (None, request.user.id):
+                return Response(
+                    {"detail": "Partition is locked by another user."},
+                    status=status.HTTP_409_CONFLICT,
+                )
+            partition.locked_by = None
+            partition.lock_expires_at = None
+            partition.save(update_fields=["locked_by", "lock_expires_at", "updated_at"])
+
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+def build_roi_task_params(payload):
+    if not isinstance(payload, dict):
+        raise ValueError("Payload must be a JSON object.")
+
+    return {
+        "include_attributes": parse_task_bool(payload.get("include_attributes"), default=True),
+        "include_obm": parse_task_bool(payload.get("include_obm"), default=True),
+        "include_level_testing": parse_task_bool(payload.get("include_level_testing"), default=True),
+        "include_coverage": parse_task_bool(payload.get("include_coverage"), default=True),
+    }
+
+
 def build_visualization_task_params(payload):
     if not isinstance(payload, dict):
         raise ValueError("Payload must be a JSON object.")
@@ -1400,9 +2146,12 @@ def parse_task_bool(value, *, default: bool) -> bool:
     raise ValueError("Expected a boolean value")
 
 
-def _visualization_response_status(status_value):
+def _async_response_status(status_value):
+    """200 for terminal states, 202 for in-flight ones. COMPLETED/FAILED are
+    the visualization/ROI vocabulary, READY the preprocessing one — the two
+    never overlap, so one mapper serves all three pipelines."""
     normalized = str(status_value or "").upper()
-    if normalized in {"COMPLETED", "FAILED"}:
+    if normalized in {"COMPLETED", "FAILED", "READY"}:
         return status.HTTP_200_OK
     return status.HTTP_202_ACCEPTED
 

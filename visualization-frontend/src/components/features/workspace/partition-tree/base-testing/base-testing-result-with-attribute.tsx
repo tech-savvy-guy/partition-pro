@@ -5,6 +5,7 @@ import "../partition-tree.css";
 import type { BaseTestingItem } from "./base-testing-result";
 import {
   getBaseTestingHeatmapLegendBins,
+  buildHeatmapMetaFromStartStep,
   computeBaseTestingHeatmapMetaFromMatrix,
   getBaseTestingHeatmapStyle,
   formatHeatmapNumber,
@@ -345,19 +346,14 @@ export default function BaseTestingResultWithAttribute({
 
   const effectiveMeta = React.useMemo(() => {
     if (!override) return heatMeta;
-
-    const start = override.start;
-    const step = override.step;
-
-    if (!Number.isFinite(start) || !Number.isFinite(step) || step <= 0)
-      return heatMeta;
-
-    const t1 = start;
-    const t2 = start + step;
-    const t3 = start + 2 * step;
-    const t4 = start + 3 * step;
-
-    return { ...heatMeta, start, step, thresholds: { t1, t2, t3, t4 } };
+    const overrideMeta = buildHeatmapMetaFromStartStep(override.start, override.step);
+    if (!overrideMeta.thresholds) return heatMeta;
+    return {
+      ...heatMeta,
+      start: overrideMeta.start,
+      step: overrideMeta.step,
+      thresholds: overrideMeta.thresholds,
+    };
   }, [heatMeta, override]);
 
   const [headerLabels, setHeaderLabels] = React.useState<Record<string, string>>(() => {

@@ -31,6 +31,7 @@ export type Case = {
   updated_at: string
   user_case_role: CaseAssignmentRole | null
   can_create_partitions: boolean
+  can_manage_case_locks: boolean
   assignments?: CaseAssignment[]
 }
 
@@ -45,9 +46,7 @@ export type CreateCasePayload = {
   assignments: CaseAssignmentPayload[]
 }
 
-export type UpdateCasePayload = Partial<
-  Omit<CreateCasePayload, "assignments">
->
+export type UpdateCasePayload = Partial<Omit<CreateCasePayload, "assignments">>
 
 export const CaseAssignmentRole = {
   Publisher: "publisher",
@@ -387,4 +386,221 @@ export type DatasetPreviewUrlResponse = {
 export type DatasetPreview = {
   columns: string[]
   rows: Record<string, string | number | null>[]
+}
+
+// ---------------------------------------------------------------------------
+// ROI methodology (roi/run, roi/status, roi/latest)
+// ---------------------------------------------------------------------------
+
+export type RoiWorkflowStatus = VisualizationWorkflowStatus
+
+/**
+ * dataframe_to_table output (core/services/visualization/serialization.py).
+ * Columns are ordered [...attributeColumns, "skuname_ean", "avg_roi",
+ * "abs_pen%", ...selectedSkuIds]; the ROI diagonal is held at 0.
+ */
+export type RoiTable = {
+  columns: string[]
+  rows: unknown[][]
+  count: number
+}
+
+/**
+ * OBM compact payload (core/services/roi/obm.py). columns =
+ * ["Holds", "SKU Count", "Partition", ...leafLabels]; each row is
+ * [holds, skuCount, leafLabel, cells] with cells aligned to leafLabels.
+ */
+export type RoiObmRow = [boolean, number, string, (number | null)[]]
+
+export type RoiObmPayload = {
+  columns: string[]
+  rows: RoiObmRow[]
+  obm_holds: boolean
+}
+
+// Level testing (core/services/roi/level_testing.py). Unwired at partition
+// level for now — the partition-tree modal consumes its own per-node variant.
+export type RoiLevelTestingMath = {
+  /** [topHeader, bottomHeader] */
+  columns: [(string | number)[], (string | number)[]]
+  rows: [number, string, string, (number | null)[]][]
+}
+
+export type RoiLevelTestingResults = {
+  columns: string[]
+  rows: unknown[][]
+}
+
+export type RoiLevelTestingPair = {
+  pair_key: string
+  attribute_1: string
+  attribute_2: string
+  final_winner: string
+  math: RoiLevelTestingMath
+  results: RoiLevelTestingResults
+}
+
+export type RoiLevelTestingPayload = {
+  lhs: { columns: string[]; rows: unknown[][] }
+  rhs: {
+    attribute_id: string
+    attribute_name: string
+    detailed_result: RoiLevelTestingPair[]
+  }[]
+}
+
+// Coverage (core/services/roi/coverage.py — pandas port of roi-tool's
+// get_overall_coverage / get_attribute_coverage).
+export type RoiCoverageSplitRow = {
+  sub_attribute: string | null
+  skus_number: number | null
+  value_share?: number | null
+  volume_share?: number | null
+  // pure-POS split only:
+  pos_value?: number | null
+  pos_volume?: number | null
+  // joined (custom / panel) splits only:
+  pos_value_covered?: number | null
+  pos_volume_covered?: number | null
+}
+
+export type RoiCoverageAttribute = {
+  id: number | string
+  attribute: string
+  color_flag: "GREEN" | "YELLOW" | "RED"
+  details: {
+    pos_sales_split_custom?: RoiCoverageSplitRow[]
+    pos_sales_split_panel?: RoiCoverageSplitRow[]
+    pos_sales_split?: RoiCoverageSplitRow[]
+  }[]
+}
+
+export type RoiCoverageOverallEntry = {
+  min_n_cutoff_selected?: number | null
+  min_n?: number | null
+  skus?: number | null
+  client_skus?: number | null
+  pos_coverage_value_pct?: number | null
+  pos_coverage_volume_pct?: number | null
+  client_coverage_value_pct?: number | null
+  client_coverage_volume_pct?: number | null
+  percent_zeroes?: number | null
+}
+
+export type RoiOverallCoverage = {
+  total_pos?: {
+    skus?: number | null
+    client_skus?: number | null
+    value?: number | null
+    volume?: number | null
+  }
+  current_selection?: RoiCoverageOverallEntry
+  all_panel_skus?: RoiCoverageOverallEntry
+}
+
+/** null when the case has no POS or CROSSPURCHASE dataset. */
+export type RoiCoveragePayload = {
+  overall_coverage: RoiOverallCoverage
+  coverage: RoiCoverageAttribute[]
+  generated_at?: string
+} | null
+
+export type RoiResult = {
+  sku_math: RoiTable | null
+  obm?: RoiObmPayload | null
+  level_testing?: RoiLevelTestingPayload | null
+  coverage?: RoiCoveragePayload
+}
+
+export type RunRoiPayload = {
+  include_attributes?: boolean
+  include_obm?: boolean
+  include_level_testing?: boolean
+  include_coverage?: boolean
+}
+
+export type RoiRunResponse = {
+  status: RoiWorkflowStatus
+  task_id?: string | null
+  workflow_run_id?: string
+  case_id?: string
+  partition_id?: string
+  polling_url?: string
+  result?: RoiResult | null
+  error?: string
+}
+
+export type RoiStatusResponse = RoiRunResponse & {
+  percent?: number
+  error_type?: string
+}
+
+export type RoiLatestResponse = {
+  status: RoiWorkflowStatus
+  case_id: string
+  partition_id: string
+  workflow_run_id?: string
+  result?: RoiResult | null
+  updated_on?: string
+  message?: string
+}
+
+// ---------------------------------------------------------------------------
+// Case preprocessing + atomic dataset selection
+// ---------------------------------------------------------------------------
+
+export type PreprocessingStatus =
+  | "PENDING"
+  | "QUEUED"
+  | "RUNNING"
+  | "READY"
+  | "FAILED"
+  | "NOT_FOUND"
+
+export type PreprocessingStatusResponse = {
+  status: PreprocessingStatus
+  case_id: string
+  metadata_id?: string
+  sku_count?: number | null
+  percent?: number
+  error?: string | null
+  updated_on?: string
+}
+
+export type SelectCaseDatasetsPayload = {
+  pos_dataset_id?: string | null
+  attributes_dataset_id?: string | null
+  cross_purchase_dataset_id?: string | null
+}
+
+export type SelectCaseDatasetsResponse = {
+  status: "QUEUED" | "READY" | "RUNNING" | "FAILED"
+  case_id: string
+  metadata_id?: string
+  detail?: string
+}
+
+export type LockedPartitionSummary = {
+  id: string
+  name: string
+  locked_by: string
+  lock_expires_at: string | null
+}
+
+/** Shape of the 409 body from `preprocessing/run/` and `datasets/select/` when partitions are actively locked. */
+export type LockedPartitionsConflict = {
+  detail: string
+  locked_partitions: LockedPartitionSummary[]
+}
+
+export type RunPreprocessingResponse = {
+  status: "QUEUED" | "READY" | "RUNNING" | "FAILED"
+  case_id: string
+  metadata_id?: string
+  detail?: string
+}
+
+export type ReleasePartitionLocksResponse = {
+  released_count: number
+  released_partitions: LockedPartitionSummary[]
 }

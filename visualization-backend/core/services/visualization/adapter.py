@@ -35,7 +35,7 @@ def _validate_selected_skus(selected_skus: list[str]) -> None:
         raise ValueError("Visualization requires at least 3 selected SKUs")
 
 
-def _rows_to_dataframe(rows, base_cols: tuple[str, ...]) -> pd.DataFrame:
+def rows_to_dataframe(rows, base_cols: tuple[str, ...]) -> pd.DataFrame:
     out = []
     for row in rows:
         row_data = {column: getattr(row, column) for column in base_cols}
@@ -58,7 +58,7 @@ def _selected_dataset(case_id: UUID | str, dataset_type: str) -> Dataset | None:
     )
 
 
-def _dataset_from_context(
+def dataset_from_context(
     case_id: UUID | str,
     dataset_type: str,
     dataset_ids: dict[str, str | None] | None,
@@ -167,7 +167,7 @@ def build_visualization_input_from_database(
     selected_skus = _unique_strings(selected_skus)
     _validate_selected_skus(selected_skus)
 
-    cross_dataset = _dataset_from_context(
+    cross_dataset = dataset_from_context(
         case_id,
         Dataset.Type.CROSS_PURCHASE,
         dataset_ids,
@@ -175,7 +175,7 @@ def build_visualization_input_from_database(
     if cross_dataset is None:
         raise ValueError("Select a ready CROSSPURCHASE dataset before visualization")
 
-    cross_df = _rows_to_dataframe(
+    cross_df = rows_to_dataframe(
         RawCrossPurchaseData.objects.filter(
             case_id=case_id,
             metadata_id=cross_dataset.id,
@@ -187,13 +187,13 @@ def build_visualization_input_from_database(
 
     attributes_df = None
     if include_attributes:
-        attributes_dataset = _dataset_from_context(
+        attributes_dataset = dataset_from_context(
             case_id,
             Dataset.Type.ATTRIBUTES,
             dataset_ids,
         )
         if attributes_dataset is not None:
-            attributes_df = _rows_to_dataframe(
+            attributes_df = rows_to_dataframe(
                 RawAttributesData.objects.filter(
                     case_id=case_id,
                     metadata_id=attributes_dataset.id,

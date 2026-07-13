@@ -3,7 +3,12 @@ export { AuthApi } from "@/core/api/auth/auth.api"
 export type { AuthResponse } from "@/core/api/auth/auth.types"
 export { UserApi } from "@/core/api/user/user.api"
 export type { AssignableUser, CurrentUser } from "@/core/api/user/user.types"
-export { CaseApi, DatasetApi, PartitionApi, WorkflowApi } from "@/core/api/cases/cases-api"
+export {
+  CaseApi,
+  DatasetApi,
+  PartitionApi,
+  WorkflowApi,
+} from "@/core/api/cases/cases-api"
 export {
   CaseAssignmentRole,
   CaseStatus,
@@ -41,8 +46,31 @@ export type {
   PartitionTreePreviewRollupResponse,
   PartitionTreePreviewRollupStatusResponse,
   PartitionTreeWorkflowData,
+  LockedPartitionsConflict,
+  LockedPartitionSummary,
+  PreprocessingStatus,
+  PreprocessingStatusResponse,
+  ReleasePartitionLocksResponse,
+  RoiCoverageAttribute,
+  RoiCoverageOverallEntry,
+  RoiCoveragePayload,
+  RoiCoverageSplitRow,
+  RoiLatestResponse,
+  RoiLevelTestingPayload,
+  RoiObmPayload,
+  RoiObmRow,
+  RoiOverallCoverage,
+  RoiResult,
+  RoiRunResponse,
+  RoiStatusResponse,
+  RoiTable,
+  RoiWorkflowStatus,
+  RunPreprocessingResponse,
+  RunRoiPayload,
   RunVisualizationPayload,
   RunWorkflowResponse,
+  SelectCaseDatasetsPayload,
+  SelectCaseDatasetsResponse,
   VisualizationLatestResponse,
   VisualizationMdsMetricsResponse,
   VisualizationMetricName,
