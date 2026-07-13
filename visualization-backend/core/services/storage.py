@@ -1,6 +1,5 @@
 import re
 from datetime import timedelta
-from urllib.parse import urlparse
 
 from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured
@@ -26,11 +25,21 @@ except ImportError:
 from core.services.utils import clean_text
 
 
+def _using_connection_string():
+    return bool(clean_text(getattr(settings, "AZURE_STORAGE_CONNECTION_STRING", "")))
+
+
 def ensure_azure_storage_configured():
     if BlobServiceClient is None or DefaultAzureCredential is None:
         raise ImproperlyConfigured(
             "Azure SDK packages are not installed. Install requirements.txt."
         )
+    if _using_connection_string():
+        if not clean_text(settings.AZURE_STORAGE_CONTAINER_NAME):
+            raise ImproperlyConfigured(
+                "Missing Azure storage setting(s): AZURE_STORAGE_CONTAINER_NAME."
+            )
+        return
     missing = []
     if not clean_text(settings.AZURE_STORAGE_ACCOUNT_URL):
         missing.append("AZURE_STORAGE_ACCOUNT_URL")
@@ -42,17 +51,12 @@ def ensure_azure_storage_configured():
         )
 
 
-def get_storage_account_name():
-    parsed = urlparse(settings.AZURE_STORAGE_ACCOUNT_URL)
-    host = parsed.netloc or parsed.path
-    account_name = host.split(".")[0]
-    if not account_name:
-        raise ImproperlyConfigured("AZURE_STORAGE_ACCOUNT_URL is invalid.")
-    return account_name
-
-
 def get_blob_service_client():
     ensure_azure_storage_configured()
+    if _using_connection_string():
+        return BlobServiceClient.from_connection_string(
+            settings.AZURE_STORAGE_CONNECTION_STRING
+        )
     return BlobServiceClient(
         account_url=settings.AZURE_STORAGE_ACCOUNT_URL,
         credential=DefaultAzureCredential(),
@@ -72,21 +76,32 @@ def generate_blob_sas_url(blob_name, permission, ttl_seconds, content_type=None)
     now = timezone.now()
     starts_at = now - timedelta(minutes=5)
     expires_at = now + timedelta(seconds=ttl_seconds)
-    blob_client = get_blob_client(blob_name)
-    user_delegation_key = get_blob_service_client().get_user_delegation_key(
-        key_start_time=starts_at,
-        key_expiry_time=expires_at,
+    service_client = get_blob_service_client()
+    blob_client = service_client.get_blob_client(
+        container=settings.AZURE_STORAGE_CONTAINER_NAME,
+        blob=blob_name,
     )
-    sas_token = generate_blob_sas(
-        account_name=get_storage_account_name(),
-        container_name=settings.AZURE_STORAGE_CONTAINER_NAME,
-        blob_name=blob_name,
-        user_delegation_key=user_delegation_key,
-        permission=permission,
-        start=starts_at,
-        expiry=expires_at,
-        content_type=content_type,
-    )
+
+    sas_kwargs = {
+        "account_name": service_client.account_name,
+        "container_name": settings.AZURE_STORAGE_CONTAINER_NAME,
+        "blob_name": blob_name,
+        "permission": permission,
+        "start": starts_at,
+        "expiry": expires_at,
+        "content_type": content_type,
+    }
+    if _using_connection_string():
+        # Azurite does not support user delegation keys, so fall back to
+        # account-key SAS generation, which works over plain HTTP.
+        sas_kwargs["account_key"] = service_client.credential.account_key
+    else:
+        sas_kwargs["user_delegation_key"] = service_client.get_user_delegation_key(
+            key_start_time=starts_at,
+            key_expiry_time=expires_at,
+        )
+
+    sas_token = generate_blob_sas(**sas_kwargs)
     return f"{blob_client.url}?{sas_token}", expires_at
 
 
