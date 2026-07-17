@@ -24,6 +24,7 @@ export function RoiHeatmapToolbar({
   bins,
   onStartStepSubmit,
   onDecimalPlacesChange,
+  onReset,
   onExport,
   children,
 }: {
@@ -35,12 +36,13 @@ export function RoiHeatmapToolbar({
   bins: HeatmapLegendBin[]
   onStartStepSubmit: (next: { start: number; step: number }) => void
   onDecimalPlacesChange: (value: number) => void
+  onReset?: () => void
   /** Omit to render the Excel button disabled. */
   onExport?: () => void
   children?: ReactNode
 }) {
   return (
-    <div className="flex flex-wrap items-center justify-between gap-4 border-b bg-card px-6 py-3">
+    <div className="flex flex-wrap items-center justify-between gap-4 border-b border-border/40 py-3">
       <div className="flex flex-wrap items-center gap-4 text-xs">
         <span className="font-semibold tracking-wider text-muted-foreground uppercase">
           {title}
@@ -52,6 +54,7 @@ export function RoiHeatmapToolbar({
           startValue={start}
           stepValue={step}
           onSubmit={onStartStepSubmit}
+          onReset={onReset}
         />
         <HeatmapDecimalPlacesSelect
           value={decimalPlaces}

@@ -82,6 +82,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetClose,
+} from "@/components/ui/sheet"
+import { Button } from "@/components/ui/button"
 
 import { PartitionTreeProvider, usePartitionTreeContext } from "./context"
 import type {
@@ -2515,49 +2523,83 @@ function PartitionTreeInner({
       </Dialog>
 
       {/* Workflow Dialog */}
-      <Dialog
+      <Sheet
         key={isFullScreen ? "workflow-fs" : "workflow-embedded"}
         open={workflowOpen}
         onOpenChange={(open) => {
           if (!open) hideWorkflowDialog()
         }}
       >
-        <DialogContent
+        <SheetContent
+          fullScreen
+          showCloseButton={false}
           container={dialogContainer}
-          overlayClassName="backdrop-blur-[2px] bg-black/30"
-          className="flex h-[88vh] max-h-[90vh] w-[96vw] max-w-[96vw] flex-col gap-0 overflow-hidden rounded-md border border-gray-200 bg-white p-0 shadow-xl sm:max-w-[96vw]"
+          className="gap-0 p-0"
+          data-slot="workflow-dialog"
         >
-          <DialogHeader className="border-b border-gray-200 bg-white px-6 pt-3 pb-2">
-            <DialogTitle render={<div />}>
-              <div className="flex w-full flex-col gap-1">
-                <span className="text-[18px] leading-tight font-semibold text-gray-900">
+          <SheetHeader className="shrink-0 border-b px-6 py-3 text-left">
+            <div className="flex items-center gap-3">
+              <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-2">
+                <SheetTitle className="shrink-0 text-lg font-semibold tracking-tight">
                   {selectedWorkflowNode?.nodeName ?? "Partition Tree"}
-                </span>
-                {attributeSelectionSubmitted && !completed ? (
-                  <div className="mt-1.5 flex max-w-[320px] flex-col gap-1.5">
-                    <div className="flex items-center justify-between text-[11px] font-medium tracking-wide text-gray-500">
-                      <span className="inline-flex items-center gap-1.5">
-                        <span className="relative flex h-1.5 w-1.5">
-                          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-blue-400 opacity-75" />
-                          <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-blue-500" />
+                </SheetTitle>
+
+                {completed && nodeMeta && (
+                  <>
+                    <span
+                      className="hidden h-4 w-px shrink-0 bg-border sm:block"
+                      aria-hidden="true"
+                    />
+                    <dl className="flex flex-wrap items-center gap-2">
+                      <div className="inline-flex items-center gap-1.5 rounded-md border border-border/60 bg-muted/30 px-2 py-1 text-[11px]">
+                        <dt className="text-muted-foreground">Branch</dt>
+                        <dd className="font-medium tabular-nums text-foreground">
+                          {nodeMeta.branch ?? "-"}
+                        </dd>
+                      </div>
+                      <div className="inline-flex items-center gap-1.5 rounded-md border border-border/60 bg-muted/30 px-2 py-1 text-[11px]">
+                        <dt className="text-muted-foreground">Level</dt>
+                        <dd className="font-medium tabular-nums text-foreground">
+                          {nodeMeta.level ?? "-"}
+                        </dd>
+                      </div>
+                    </dl>
+                  </>
+                )}
+
+                {attributeSelectionSubmitted && !completed && (
+                  <>
+                    <span
+                      className="hidden h-4 w-px shrink-0 bg-border sm:block"
+                      aria-hidden="true"
+                    />
+                    <div className="flex flex-col gap-1 min-w-[120px] sm:min-w-[200px]">
+                      <div className="flex items-center justify-between text-[11px] font-medium text-gray-500">
+                        <span className="inline-flex items-center gap-1.5">
+                          <span className="relative flex h-1.5 w-1.5">
+                            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-blue-400 opacity-75" />
+                            <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-blue-500" />
+                          </span>
+                          Processing
                         </span>
-                        Processing
-                      </span>
-                      <span className="text-gray-400 tabular-nums">
-                        {percent.toFixed(0)}%
-                      </span>
+                        <span className="text-gray-400 tabular-nums">
+                          {percent.toFixed(0)}%
+                        </span>
+                      </div>
+                      <div className="h-1 w-full overflow-hidden rounded-full bg-gray-100">
+                        <div
+                          className="h-full rounded-full bg-blue-500 transition-[width] duration-500 ease-out"
+                          style={{
+                            width: `${Math.min(Math.max(percent, 4), 100)}%`,
+                          }}
+                        />
+                      </div>
                     </div>
-                    <div className="h-1 w-full overflow-hidden rounded-full bg-gray-100">
-                      <div
-                        className="h-full rounded-full bg-blue-500 transition-[width] duration-500 ease-out"
-                        style={{
-                          width: `${Math.min(Math.max(percent, 4), 100)}%`,
-                        }}
-                      />
-                    </div>
-                  </div>
-                ) : completed ? (
-                  <span className="mt-1 inline-flex items-center gap-1.5 text-[11px] font-medium tracking-wide text-gray-400">
+                  </>
+                )}
+
+                {completed && (
+                  <span className="inline-flex items-center gap-1.5 text-[11px] font-medium tracking-wide text-gray-400">
                     <svg
                       viewBox="0 0 20 20"
                       fill="none"
@@ -2574,33 +2616,25 @@ function PartitionTreeInner({
                     </svg>
                     Complete
                   </span>
-                ) : null}
-                {completed && nodeMeta ? (
-                  <div className="mt-2 flex flex-wrap items-center gap-3 text-[12px]">
-                    <div className="inline-flex items-center gap-2">
-                      <span className="rounded bg-gray-200 px-2 py-[2px] font-medium text-gray-700">
-                        Current Branch :
-                      </span>
-                      <span className="rounded bg-gray-100 px-2 py-[2px] font-semibold text-gray-900">
-                        {nodeMeta.branch ?? "-"}
-                      </span>
-                    </div>
-                    <div className="inline-flex items-center gap-2">
-                      <span className="rounded bg-gray-200 px-2 py-[2px] font-medium text-gray-700">
-                        Current Level :
-                      </span>
-                      <span className="rounded bg-gray-100 px-2 py-[2px] font-semibold text-gray-900">
-                        {nodeMeta.level ?? "-"}
-                      </span>
-                    </div>
-                  </div>
-                ) : null}
+                )}
               </div>
-            </DialogTitle>
-          </DialogHeader>
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-white">
+
+              <SheetClose
+                render={
+                  <Button
+                    variant="link"
+                    size="sm"
+                    className="h-auto shrink-0 px-0 text-sm font-medium"
+                  />
+                }
+              >
+                Close
+              </SheetClose>
+            </div>
+          </SheetHeader>
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
             {/* Tab bar */}
-            <div className="flex-shrink-0 border-b border-gray-200 bg-white px-6 pt-4 pb-2">
+            <div className="flex-shrink-0 border-b border-gray-200 bg-background px-6 pt-4 pb-2">
               <div className="flex flex-wrap items-center gap-2">
                 {workflowTabGroups.map((group, groupIndex) => (
                   <Fragment key={group.map((t) => t.id).join("-")}>
@@ -2753,8 +2787,8 @@ function PartitionTreeInner({
               )}
             </div>
           </div>
-        </DialogContent>
-      </Dialog>
+        </SheetContent>
+      </Sheet>
     </div>
   )
 }

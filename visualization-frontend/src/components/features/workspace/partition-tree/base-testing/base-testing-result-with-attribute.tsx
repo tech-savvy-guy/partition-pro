@@ -82,11 +82,13 @@ function HeatmapLegendInline({
   decimalPlaces,
   onDecimalPlacesChange,
   onSubmitStartStep,
+  onReset,
 }: {
   meta: DiagonalBucketHeatmapMeta;
   decimalPlaces: number;
   onDecimalPlacesChange: (decimalPlaces: number) => void;
   onSubmitStartStep: (start: number, step: number) => void;
+  onReset?: () => void;
 }) {
   const bins = React.useMemo(
     () => getBaseTestingHeatmapLegendBins(meta, decimalPlaces),
@@ -94,33 +96,32 @@ function HeatmapLegendInline({
   );
 
   return (
-    <div className="border border-gray-200 rounded-md bg-white px-3 py-2 mb-3">
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs">
-        <span className="font-semibold text-gray-800">Heatmap legend</span>
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs py-2 mb-3 border-b border-border/40">
+      <span className="font-semibold text-gray-800">Heatmap legend</span>
 
-        <HeatmapStartStepEditor
-          startLabel="Start (min non-zero diagonal)"
-          stepLabel="Step"
-          startValue={meta.start}
-          stepValue={meta.step}
-          onSubmit={({ start, step }) => onSubmitStartStep(start, step)}
-        />
+      <HeatmapStartStepEditor
+        startLabel="Start (min non-zero diagonal)"
+        stepLabel="Step"
+        startValue={meta.start}
+        stepValue={meta.step}
+        onSubmit={({ start, step }) => onSubmitStartStep(start, step)}
+        onReset={onReset}
+      />
 
-        <HeatmapDecimalPlacesSelect
-          value={decimalPlaces}
-          onChange={onDecimalPlacesChange}
-        />
+      <HeatmapDecimalPlacesSelect
+        value={decimalPlaces}
+        onChange={onDecimalPlacesChange}
+      />
 
-        {bins.map((b) => (
-          <span key={b.label} className="inline-flex items-center gap-2">
-            <span
-              className="inline-block w-3 h-3 border border-gray-300"
-              style={{ backgroundColor: b.color }}
-            />
-            <span className="text-gray-700 whitespace-nowrap">{b.label}</span>
-          </span>
-        ))}
-      </div>
+      {bins.map((b) => (
+        <span key={b.label} className="inline-flex items-center gap-2">
+          <span
+            className="inline-block w-3 h-3 border border-gray-300"
+            style={{ backgroundColor: b.color }}
+          />
+          <span className="text-gray-700 whitespace-nowrap">{b.label}</span>
+        </span>
+      ))}
     </div>
   );
 }
@@ -520,6 +521,17 @@ export default function BaseTestingResultWithAttribute({
               }
             }
           }}
+          onReset={override ? () => {
+            setOverride(null);
+            if (caseId && partitionId && parsed.attribute) {
+              patchHeatmapOverride(
+                caseId,
+                partitionId,
+                `basetesting:${parsed.attribute}`,
+                { start: null, step: null },
+              );
+            }
+          } : undefined}
         />
       </div>
       <div ref={tableContainerRef} className="flex-1 min-h-0">

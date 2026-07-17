@@ -64,11 +64,13 @@ function HeatmapLegendInline({
   decimalPlaces,
   onDecimalPlacesChange,
   onSubmitStartStep,
+  onReset,
 }: {
   meta: LevelTestingHeatmapMeta;
   decimalPlaces: number;
   onDecimalPlacesChange: (decimalPlaces: number) => void;
   onSubmitStartStep: (start: number, step: number) => void;
+  onReset?: () => void;
 }) {
   const bins = React.useMemo(
     () => getLevelTestingHeatmapLegendBins(meta, decimalPlaces),
@@ -86,6 +88,7 @@ function HeatmapLegendInline({
         stepValue={meta.step}
         inputStep={0.5}
         onSubmit={({ start, step }) => onSubmitStartStep(start, step)}
+        onReset={onReset}
       />
 
       <HeatmapDecimalPlacesSelect
@@ -338,6 +341,10 @@ export default function LevelTestingMath({ pair }: Props) {
                   persistHeatmapSettings({ start, step });
                 }
               }}
+              onReset={override ? () => {
+                setOverride(null);
+                persistHeatmapSettings({ start: null, step: null });
+              } : undefined}
             />
           </div>
           <button

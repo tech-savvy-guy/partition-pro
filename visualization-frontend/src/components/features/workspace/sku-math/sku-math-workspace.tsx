@@ -135,13 +135,14 @@ function SkuMathContent({
   return (
     <div className="flex flex-1 flex-col gap-4 bg-background p-6">
       <RoiHeatmapToolbar
-        title="SKU Math"
+        title="Heatmap Legend"
         start={meta.start}
         step={meta.step}
         decimalPlaces={decimalPlaces}
         bins={bins}
         onStartStepSubmit={setOverride}
         onDecimalPlacesChange={setDecimalPlaces}
+        onReset={override ? () => setOverride(null) : undefined}
         onExport={view && view.rows.length ? exportAsExcel : undefined}
       >
         {isRefreshing ? (
@@ -153,31 +154,31 @@ function SkuMathContent({
       </RoiHeatmapToolbar>
 
       {/* Heatmap column filters — rule building is a later pass. */}
-      <div className="flex flex-col gap-3 border border-border bg-card p-4">
+      <div className="flex flex-col gap-2.5 border border-border/40 bg-card/40 p-3 shadow-2xs backdrop-blur-xs">
         <div className="flex items-center justify-between">
           <div className="min-w-0">
-            <p className="text-sm font-medium text-foreground">
-              Heatmap column filters
+            <p className="text-xs font-semibold tracking-wider text-muted-foreground uppercase">
+              Heatmap Column Filters
             </p>
-            <p className="mt-0.5 text-xs text-muted-foreground">
+            <p className="mt-0.5 text-[11px] font-mono text-muted-foreground/80">
               Showing {view?.rows.length ?? 0} of {view?.rows.length ?? 0} rows
               · {view?.skuColumns.length ?? 0} of {view?.skuColumns.length ?? 0}{" "}
-              heatmap columns
+              columns
             </p>
           </div>
           <Button
             type="button"
             size="sm"
             variant="outline"
-            className="h-8 gap-1.5 rounded-none px-3 text-xs font-medium"
+            className="h-7 gap-1.5 rounded-none border-border/40 px-2.5 text-[10px] font-medium tracking-wide uppercase disabled:opacity-40"
             disabled
             title="Column rules are coming in a later pass"
           >
-            <PlusIcon data-icon="inline-start" />
+            <PlusIcon data-icon="inline-start" className="size-3" />
             Add rule
           </Button>
         </div>
-        <p className="rounded-none border border-dashed border-border px-3 py-4 text-center text-xs text-muted-foreground">
+        <p className="rounded-none border border-dashed border-border/30 bg-muted/5 py-3 text-center font-mono text-[10px] text-muted-foreground/60">
           No filters applied. Add a rule to narrow the heatmap columns.
         </p>
       </div>

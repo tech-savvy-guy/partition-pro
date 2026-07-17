@@ -199,6 +199,7 @@ function ObmResultView({
         bins={bins}
         onStartStepSubmit={setOverride}
         onDecimalPlacesChange={setDecimalPlaces}
+        onReset={override ? () => setOverride(null) : undefined}
         onExport={view.rows.length ? exportAsExcel : undefined}
       >
         <Badge
