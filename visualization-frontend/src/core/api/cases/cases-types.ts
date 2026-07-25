@@ -82,7 +82,7 @@ export type Partition = {
   tags: Record<string, unknown>
   base_partition: string | null
   locked_by: string | null
-  locked_by_display_name: string
+  locked_by_display_name: string | null
   lock_expires_at: string | null
   created_by: string | null
   updated_by: string | null
@@ -97,7 +97,18 @@ export type CreatePartitionPayload = {
   is_shared: boolean
   tags: Record<string, unknown>
   base_partition: string | null
-  locked_by: string | null
+}
+
+export type PartitionLockResponse = {
+  locked_by: string
+  locked_by_display_name: string
+  lock_expires_at: string
+}
+
+export type PartitionLockConflict = {
+  detail: string
+  locked_by: string
+  locked_by_display_name: string
   lock_expires_at: string | null
 }
 
@@ -584,6 +595,7 @@ export type LockedPartitionSummary = {
   id: string
   name: string
   locked_by: string
+  locked_by_display_name: string
   lock_expires_at: string | null
 }
 

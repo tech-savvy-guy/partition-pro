@@ -290,12 +290,21 @@ export function DatasetsSection({
   const allTypesSelected = datasetOptions.every(
     (option) => savedSelections[option.value] !== ""
   )
+  const preprocessingStatus = preprocessingQuery.data?.status
   const preprocessingActive = Boolean(
-    preprocessingQuery.data?.status &&
-    ACTIVE_PREPROCESSING_STATUSES.has(preprocessingQuery.data.status)
+    preprocessingStatus && ACTIVE_PREPROCESSING_STATUSES.has(preprocessingStatus)
   )
+  const preprocessingReady = preprocessingStatus === "READY"
+  const preprocessingFailed = preprocessingStatus === "FAILED"
   const showStartPreprocessing =
     canEdit && allTypesSelected && !hasSelectionChanges
+  const showPreprocessingPrompt =
+    canEdit &&
+    (hasSelectionChanges ||
+      (allTypesSelected &&
+        !preprocessingActive &&
+        !preprocessingReady &&
+        Boolean(preprocessingStatus)))
 
   useEffect(() => {
     setDraftSelections(savedSelections)
@@ -660,6 +669,26 @@ export function DatasetsSection({
         </Alert>
       ) : null}
 
+      {showPreprocessingPrompt ? (
+        <Alert>
+          <AlertTriangleIcon aria-hidden="true" />
+          <AlertTitle>
+            {hasSelectionChanges
+              ? "Datasets changed"
+              : preprocessingFailed
+                ? "Preprocessing failed"
+                : "Preprocessing required"}
+          </AlertTitle>
+          <AlertDescription>
+            {hasSelectionChanges
+              ? "Save your dataset selection, then run preprocessing again before creating partitions."
+              : preprocessingFailed
+                ? "Fix any dataset issues if needed, then click Start Preprocessing to try again."
+                : "All required datasets are selected. Click Start Preprocessing before creating partitions."}
+          </AlertDescription>
+        </Alert>
+      ) : null}
+
       <div className="grid gap-2 md:grid-cols-3">
         {datasetOptions.map((option) => {
           const typeDatasets = datasetsByType[option.value]
@@ -812,8 +841,8 @@ export function DatasetsSection({
                   />
                   {partition.name}
                 </span>
-                <span className="rounded bg-muted/65 px-2 py-0.5 font-mono text-muted-foreground">
-                  {partition.locked_by}
+                <span className="rounded bg-muted/65 px-2 py-0.5 text-muted-foreground">
+                  {partition.locked_by_display_name || partition.locked_by}
                 </span>
               </div>
             ))}

@@ -1,5 +1,7 @@
 import * as React from "react";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Dialog,
   DialogContent,
@@ -8,6 +10,12 @@ import {
 } from "@/components/ui/dialog";
 import { Warning } from "./icons";
 import { DataGrid, type DataGridColumn } from "./components/data-grid";
+import {
+  CircleAlertIcon,
+  DatabaseIcon,
+  LoaderCircleIcon,
+  SearchIcon,
+} from "lucide-react";
 
 type Props = {
   data?: any;
@@ -24,17 +32,16 @@ type ValueToken = { label: string; count: string | null };
 function ClientSkuLegend({ className = "" }: { className?: string }) {
   return (
     <div
-      className={`flex flex-wrap items-center gap-2 text-[11px] text-gray-600 ${className}`}
+      className={`flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground ${className}`}
     >
-      <span className="font-medium text-gray-500">Legend</span>
+      <span className="font-medium">Legend</span>
       <span
-        className="inline-flex shrink-0 items-center bg-white"
-        style={{ border: "1.5px solid #000000" }}
+        className="inline-flex shrink-0 items-center border border-foreground bg-background"
       >
-        <span className="inline-flex h-6 items-center bg-[#f7f8fa] px-2 text-[11px] font-medium text-[#3f4a58]">
+        <span className="inline-flex h-6 items-center bg-muted px-2 text-[11px] font-medium text-foreground">
           Attribute Value
         </span>
-        <span className="inline-flex h-6 items-center bg-[#ef5e67] px-2 text-[11px] font-semibold text-white">
+        <span className="inline-flex h-6 items-center bg-primary px-2 text-[11px] font-semibold text-primary-foreground">
           # Client SKUs
         </span>
       </span>
@@ -76,7 +83,7 @@ function ValuesViewportCell({ tokens, onOpenAll }: ValuesViewportCellProps) {
       const countWidth = hasCount ? estimateTextWidth(`#${token.count}`) : 0;
       const labelPillWidth = labelWidth + 16;
       const countPillWidth = hasCount ? countWidth + 16 : 0;
-      return labelPillWidth + countPillWidth + 3;
+      return labelPillWidth + countPillWidth + 2;
     },
     [estimateTextWidth],
   );
@@ -87,11 +94,14 @@ function ValuesViewportCell({ tokens, onOpenAll }: ValuesViewportCellProps) {
   );
 
   const { visibleCount, remainingCount } = React.useMemo(() => {
-    if (tokens.length <= 1 || containerWidth <= 0) {
+    if (containerWidth <= 0) {
+      return { visibleCount: 0, remainingCount: 0 };
+    }
+    if (tokens.length <= 1) {
       return { visibleCount: tokens.length, remainingCount: 0 };
     }
 
-    const gap = 4;
+    const gap = 5;
     let used = 0;
     let visible = 0;
 
@@ -123,19 +133,21 @@ function ValuesViewportCell({ tokens, onOpenAll }: ValuesViewportCellProps) {
   const visibleTokens = tokens.slice(0, visibleCount);
 
   return (
-    <div ref={containerRef} className="w-full min-w-0 overflow-hidden">
-      <div className="flex items-center gap-1 overflow-hidden whitespace-nowrap">
+    <div
+      ref={containerRef}
+      className="h-7 w-full min-w-0 max-w-full overflow-hidden"
+    >
+      <div className="flex h-full w-full items-center gap-1 overflow-hidden">
         {visibleTokens.map((token, idx) => (
           <span
             key={`${token.label}-${idx}`}
-            className="inline-flex shrink-0 items-center bg-white"
-            style={{ border: "1.5px solid #000000" }}
+            className="inline-flex h-7 shrink-0 items-center overflow-hidden border border-border bg-background"
           >
-            <span className="inline-flex h-6 items-center bg-[#f7f8fa] px-2 text-[11px] font-medium text-[#3f4a58]">
+            <span className="inline-flex h-full items-center bg-background px-2 text-[11px] font-medium leading-none text-foreground">
               {token.label}
             </span>
             {token.count != null && token.count !== "" ? (
-              <span className="inline-flex h-6 items-center bg-[#ef5e67] px-2 text-[11px] font-semibold text-white">
+              <span className="inline-flex h-full items-center border-l border-primary/20 bg-primary px-2 text-[11px] font-semibold leading-none text-primary-foreground">
                 #{token.count}
               </span>
             ) : null}
@@ -144,8 +156,11 @@ function ValuesViewportCell({ tokens, onOpenAll }: ValuesViewportCellProps) {
         {remainingCount > 0 ? (
           <button
             type="button"
-            onClick={onOpenAll}
-            className="shrink-0 border-0 bg-transparent px-0 text-[11px] font-semibold text-[#d10001] hover:underline pl-2"
+            onClick={(event) => {
+              event.stopPropagation();
+              onOpenAll();
+            }}
+            className="shrink-0 border-0 bg-transparent px-1 text-[11px] font-semibold text-primary underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             +{remainingCount} more
           </button>
@@ -466,6 +481,21 @@ export default function AttributeSelection({
     );
   }, [selectedRows]);
 
+  const allAttributesSelected = React.useMemo(
+    () =>
+      tableRows.length > 0 &&
+      tableRows.every((row) =>
+        selectedKeys.has(String(row.__attrKey ?? row.__rowKey ?? "")),
+      ),
+    [selectedKeys, tableRows],
+  );
+
+  const handleToggleSelectAll = React.useCallback(() => {
+    if (readOnly) return;
+    userEditedRef.current = true;
+    setSelectedRows(allAttributesSelected ? [] : tableRows);
+  }, [allAttributesSelected, readOnly, tableRows]);
+
   const submitPayload = React.useMemo(() => {
     if (!columns.length || !rows.length) return null;
     if (selectedColIndex == null) return null;
@@ -513,134 +543,218 @@ export default function AttributeSelection({
   }, [submitPayload, readOnly, nodeObj, onSubmitSelection]);
 
   return (
-    <div className="w-full min-w-0 space-y-4">
-      <div className="w-full rounded-lg border border-gray-200 bg-gradient-to-r from-white via-gray-50 to-white p-3">
-        <div className="grid w-full grid-cols-1 gap-3 xl:grid-cols-[minmax(240px,280px)_auto_1fr_auto] xl:items-center">
-          <div className="relative w-full min-w-0">
-            <i className="pi pi-search absolute left-3 top-1/2 -translate-y-1/2 text-[12px] text-gray-400" />
-            <input
-              type="text"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Search attributes..."
-              className="h-9 w-full rounded-md border border-gray-200 bg-white pl-9 pr-3 text-[12px] text-gray-700 placeholder:text-gray-400 focus:border-gray-400 focus:outline-none"
-            />
-          </div>
-
-          <div className="inline-flex h-9 items-center rounded-md border border-gray-200 bg-white px-3 text-[12px] font-medium text-gray-600">
-            {selectedRows.length} / {filteredTableRows.length} selected
-          </div>
-
-          <div className="flex min-w-0 items-center gap-2 rounded-md border border-[#eddc98] bg-[#f6e9b8] px-3 py-2 text-[11px] text-[#5f4f18]">
-            <Warning className="h-3.5 w-3.5 shrink-0" />
-            <span className="min-w-0 truncate">
-              Do not select - skuname_ean, Brand, Sub-brand, EAN Code, etc.
-            </span>
-          </div>
-
-          <div className="flex min-w-0 flex-col items-stretch gap-2 sm:flex-row sm:items-center sm:justify-end sm:gap-3">
-            {!loading && !error && columns.length > 0 && rows.length > 0 ? (
-              <ClientSkuLegend className="min-w-0 shrink" />
-            ) : null}
-            <Button
-              size="sm"
-              className="h-9 w-full shrink-0 !min-w-[96px] px-4 !text-[11px] !font-semibold sm:w-auto"
-              onClick={handleSubmit}
-              disabled={
-                readOnly ||
-                submitting ||
-                loading ||
-                resultsFetching ||
-                !submitPayload ||
-                !onSubmitSelection
-              }
-            >
-              Submit
-            </Button>
-          </div>
+    <div className="flex h-full min-h-0 w-full min-w-0 flex-col bg-background">
+      <div className="flex shrink-0 flex-wrap items-center gap-3 border-b border-border bg-background px-6 py-3">
+        <div className="relative min-w-[240px] flex-1 basis-[320px]">
+          <SearchIcon className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <input
+            type="text"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            placeholder="Search attributes or values"
+            aria-label="Search attributes or values"
+            className="h-10 w-full rounded-md border border-input bg-background pl-10 pr-3 text-[12px] text-foreground shadow-xs outline-none transition-colors placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/20"
+          />
         </div>
+
+        <div className="flex h-10 shrink-0 items-center gap-1.5 rounded-md border border-border bg-background px-3 text-[12px] tabular-nums text-muted-foreground shadow-xs">
+          <span className="font-semibold text-foreground">
+            {selectedRows.length} / {tableRows.length}
+          </span>
+          <span>selected</span>
+          {readOnly ? (
+            <span className="ml-1 border-l border-border pl-2 font-medium text-foreground">
+              View only
+            </span>
+          ) : null}
+        </div>
+
+        <div className="flex h-10 min-w-[260px] flex-[1.2] basis-[360px] items-center gap-2 rounded-md border border-amber-300/70 bg-amber-50 px-3 text-[11px] text-amber-950">
+          <Warning className="size-3.5 shrink-0 text-amber-700" />
+          <span className="min-w-0 truncate">
+            Exclude identifiers such as skuname_ean, Brand, Sub-brand, and EAN
+            Code.
+          </span>
+        </div>
+
+        <Button
+          size="sm"
+          className="h-10 shrink-0 px-5 text-[12px] font-semibold shadow-sm"
+          onClick={handleSubmit}
+          disabled={
+            readOnly ||
+            submitting ||
+            loading ||
+            resultsFetching ||
+            selectedRows.length === 0 ||
+            !submitPayload ||
+            !onSubmitSelection
+          }
+        >
+          {submitting || resultsFetching ? (
+            <>
+              <LoaderCircleIcon
+                data-icon="inline-start"
+                className="animate-spin"
+              />
+              Processing
+            </>
+          ) : (
+            "Submit"
+          )}
+        </Button>
       </div>
 
       {loading ? (
-        <div className="rounded-md border border-gray-200 bg-white px-3 py-2 text-xs text-gray-600">
-          Loading attributes...
+        <div className="flex min-h-0 flex-1 items-center justify-center p-8">
+          <div className="flex flex-col items-center gap-3 text-center">
+            <span className="flex size-10 items-center justify-center rounded-full bg-muted text-muted-foreground">
+              <LoaderCircleIcon className="size-5 animate-spin" />
+            </span>
+            <div>
+              <p className="text-sm font-medium text-foreground">
+                Loading attributes
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Preparing the available attributes and values.
+              </p>
+            </div>
+          </div>
         </div>
       ) : error ? (
-        <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
-          {error}
+        <div className="flex min-h-0 flex-1 items-center justify-center p-8">
+          <div className="flex max-w-md items-start gap-3 rounded-lg border border-destructive/20 bg-destructive/5 p-4">
+            <CircleAlertIcon className="mt-0.5 size-5 shrink-0 text-destructive" />
+            <div>
+              <p className="text-sm font-medium text-destructive">
+                Attributes could not be loaded
+              </p>
+              <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                {error}
+              </p>
+            </div>
+          </div>
         </div>
       ) : columns.length === 0 || rows.length === 0 ? (
-        <div className="rounded-md border border-gray-200 bg-white px-3 py-2 text-xs text-gray-600">
-          No attribute data available.
+        <div className="flex min-h-0 flex-1 items-center justify-center p-8">
+          <div className="flex max-w-sm flex-col items-center gap-3 text-center">
+            <span className="flex size-10 items-center justify-center rounded-full bg-muted text-muted-foreground">
+              <DatabaseIcon className="size-5" />
+            </span>
+            <div>
+              <p className="text-sm font-medium text-foreground">
+                No attributes available
+              </p>
+              <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                Attribute data will appear here when it is available for this
+                partition.
+              </p>
+            </div>
+          </div>
         </div>
       ) : (
-        <div className="w-full min-w-0 overflow-hidden rounded-lg border border-gray-200 bg-white shadow-[0_8px_24px_-20px_rgba(15,23,42,0.55)]">
-          <DataGrid<Record<string, any>>
-            rows={filteredTableRows}
-            rowKey={(row) => String(row.__attrKey ?? row.__rowKey ?? "")}
-            showGridlines
-            scrollable
-            scrollHeight="56vh"
-            className="app-table workflow-attribute-table w-full"
-            tableStyle={{ minWidth: "100%" }}
-            emptyMessage="No results."
-            selectionMode="multiple"
-            selectionHeaderClassName="col-checkbox"
-            selectionCellClassName="col-checkbox"
-            selectedKeys={selectedKeys}
-            onSelectionChange={(_keys, rows) => {
-              userEditedRef.current = true;
-              setSelectedRows(rows);
-            }}
-            columns={tableColumns.map<DataGridColumn<Record<string, any>>>(
-              (col) => ({
-                key: col,
-                field: col,
-                header: col,
-                cellStyle: isValuesColumn(col)
-                  ? { width: "100%", minWidth: "22rem" }
-                  : isAttributeColumn(col)
-                    ? { width: "220px", minWidth: "220px" }
-                    : undefined,
-                cell: (rowData: Record<string, any>) => {
-                  const value = formatCell(rowData[col]);
-                  if (isAttributeColumn(col)) {
-                    return (
-                      <span className="text-[12px] font-medium text-gray-800">
-                        {value}
-                      </span>
+        <div className="min-h-0 w-full min-w-0 flex-1 overflow-hidden bg-background p-3 sm:p-4">
+          <ScrollArea className="h-full w-full border border-border bg-card shadow-xs [&_[data-slot=scroll-area-scrollbar]]:w-1.5 [&_[data-slot=scroll-area-scrollbar]]:bg-background [&_[data-slot=scroll-area-thumb]]:bg-border">
+            <DataGrid<Record<string, any>>
+              rows={filteredTableRows}
+              rowKey={(row) => String(row.__attrKey ?? row.__rowKey ?? "")}
+              nativeTable
+              wrapperClassName="w-full"
+              className="workflow-attribute-table [&_thead]:sticky [&_thead]:top-0 [&_thead]:z-10"
+              tableStyle={{ width: "100%", tableLayout: "fixed" }}
+              emptyMessage="No attributes match your search."
+              selectionMode="multiple"
+              selectionColumnWidth={52}
+              selectionHeader={
+                <Checkbox
+                  checked={allAttributesSelected}
+                  onCheckedChange={handleToggleSelectAll}
+                  disabled={readOnly || tableRows.length === 0}
+                  onClick={(event) => event.stopPropagation()}
+                  aria-label={
+                    allAttributesSelected
+                      ? "Clear all attribute selections"
+                      : "Select all attributes"
+                  }
+                  className="rounded-none"
+                />
+              }
+              selectionHeaderClassName="col-checkbox"
+              selectionCellClassName="col-checkbox"
+              selectedKeys={selectedKeys}
+              onSelectionChange={(_keys, rows) => {
+                userEditedRef.current = true;
+                setSelectedRows(rows);
+              }}
+              columns={tableColumns.map<DataGridColumn<Record<string, any>>>(
+              (col) => {
+                const attributeColumn = isAttributeColumn(col);
+                const valuesColumn = isValuesColumn(col);
+                return {
+                  key: col,
+                  field: col,
+                  header: col,
+                  width: attributeColumn ? 280 : undefined,
+                  headerClassName: valuesColumn
+                    ? "col-values"
+                    : attributeColumn
+                      ? "col-attribute"
+                      : undefined,
+                  cellClassName: valuesColumn
+                    ? "col-values !whitespace-nowrap"
+                    : attributeColumn
+                      ? "col-attribute"
+                      : undefined,
+                  cell: (rowData: Record<string, any>) => {
+                    const value = formatCell(rowData[col]);
+                    if (attributeColumn) {
+                      return (
+                        <span className="block truncate text-[12px] font-medium text-foreground">
+                          {value}
+                        </span>
+                      );
+                    }
+
+                    if (!valuesColumn) {
+                      return (
+                        <span className="text-[12px] text-muted-foreground">
+                          {value}
+                        </span>
+                      );
+                    }
+
+                    const tokensWithCounts = buildTokensWithCounts(
+                      rowData,
+                      col,
                     );
-                  }
+                    if (tokensWithCounts.length === 0) {
+                      return (
+                        <span className="text-[12px] text-muted-foreground">
+                          -
+                        </span>
+                      );
+                    }
 
-                  if (!isValuesColumn(col)) {
+                    const attributeName = getAttributeName(rowData);
                     return (
-                      <span className="text-[12px] text-gray-700">{value}</span>
+                      <ValuesViewportCell
+                        tokens={tokensWithCounts}
+                        onOpenAll={() => {
+                          setValuesDialogData({
+                            attributeName,
+                            tokens: tokensWithCounts,
+                          });
+                          setValuesDialogSearchTerm("");
+                          setValuesDialogOpen(true);
+                        }}
+                      />
                     );
-                  }
-
-                  const tokensWithCounts = buildTokensWithCounts(rowData, col);
-                  if (tokensWithCounts.length === 0) {
-                    return <span className="text-[12px] text-gray-500">-</span>;
-                  }
-
-                  const attributeName = getAttributeName(rowData);
-                  return (
-                    <ValuesViewportCell
-                      tokens={tokensWithCounts}
-                      onOpenAll={() => {
-                        setValuesDialogData({
-                          attributeName,
-                          tokens: tokensWithCounts,
-                        });
-                        setValuesDialogSearchTerm("");
-                        setValuesDialogOpen(true);
-                      }}
-                    />
-                  );
-                },
-              }),
+                  },
+                };
+              },
             )}
-          />
+            />
+          </ScrollArea>
         </div>
       )}
 
@@ -654,66 +768,66 @@ export default function AttributeSelection({
           <DialogHeader className="px-4 py-3">
             <DialogTitle render={<div />}>
               <div className="flex min-w-0 items-center gap-2">
-                <span className="text-[16px] font-semibold text-gray-900">
+                <span className="text-[16px] font-semibold text-foreground">
                   {valuesDialogData.attributeName || "Attribute values"}
                 </span>
-                <span className="rounded bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-gray-600">
+                <span className="rounded bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
                   {valuesDialogData.tokens.length} values
                 </span>
               </div>
             </DialogTitle>
           </DialogHeader>
-        <div className="space-y-2.5">
-          <ClientSkuLegend className="rounded-md border border-gray-200 bg-gray-50/60 px-3 py-2" />
-          <div className="relative">
-            <i className="pi pi-search absolute left-3 top-1/2 -translate-y-1/2 text-[12px] text-gray-400" />
-            <input
-              type="text"
-              value={valuesDialogSearchTerm}
-              onChange={(e) => setValuesDialogSearchTerm(e.target.value)}
-              placeholder="Search attribute values..."
-              className="h-9 w-full rounded-md border border-gray-200 bg-white pl-9 pr-3 text-[12px] text-gray-700 placeholder:text-gray-400 focus:border-gray-400 focus:outline-none"
-            />
-          </div>
-          <div className="max-h-[340px] overflow-y-auto rounded-md border border-gray-200">
-            {filteredDialogTokens.length === 0 ? (
-              <div className="px-3 py-4 text-[12px] text-gray-500">
-                No values found.
-              </div>
-            ) : (
-              <table className="w-full border-collapse">
-                <thead className="sticky top-0 z-10 bg-gray-50">
-                  <tr>
-                    <th className="border-b border-gray-200 px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-gray-600">
-                      Attribute Value
-                    </th>
-                    <th className="border-b border-gray-200 px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-gray-600">
-                      Client SKUs
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredDialogTokens.map((token, idx) => (
-                    <tr
-                      key={`${token.label}-${idx}`}
-                      className="odd:bg-white even:bg-gray-50/40"
-                    >
-                      <td className="border-b border-gray-100 px-3 py-2 text-[12px] text-gray-800">
-                        <span className="block truncate">{token.label}</span>
-                      </td>
-                      <td className="border-b border-gray-100 px-3 py-2 text-[12px] font-medium text-gray-700">
-                        {token.count ?? "-"}
-                      </td>
+          <div className="space-y-2.5">
+            <ClientSkuLegend className="rounded-md border border-border bg-muted/40 px-3 py-2" />
+            <div className="relative">
+              <SearchIcon className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+              <input
+                type="text"
+                value={valuesDialogSearchTerm}
+                onChange={(e) => setValuesDialogSearchTerm(e.target.value)}
+                placeholder="Search attribute values..."
+                aria-label="Search attribute values"
+                className="h-9 w-full rounded-md border border-input bg-background pl-9 pr-3 text-[12px] text-foreground placeholder:text-muted-foreground focus-visible:border-ring focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/20"
+              />
+            </div>
+            <div className="max-h-[340px] overflow-y-auto rounded-md border border-border">
+              {filteredDialogTokens.length === 0 ? (
+                <div className="px-3 py-6 text-center text-[12px] text-muted-foreground">
+                  No values match your search.
+                </div>
+              ) : (
+                <table className="w-full border-collapse">
+                  <thead className="sticky top-0 z-10 bg-muted">
+                    <tr>
+                      <th className="border-b border-border px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                        Attribute Value
+                      </th>
+                      <th className="border-b border-border px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                        Client SKUs
+                      </th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
+                  </thead>
+                  <tbody>
+                    {filteredDialogTokens.map((token, idx) => (
+                      <tr
+                        key={`${token.label}-${idx}`}
+                        className="odd:bg-background even:bg-muted/30"
+                      >
+                        <td className="border-b border-border/70 px-3 py-2 text-[12px] text-foreground">
+                          <span className="block truncate">{token.label}</span>
+                        </td>
+                        <td className="border-b border-border/70 px-3 py-2 text-[12px] font-medium text-muted-foreground">
+                          {token.count ?? "-"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
           </div>
-        </div>
         </DialogContent>
       </Dialog>
     </div>
   );
-
 }

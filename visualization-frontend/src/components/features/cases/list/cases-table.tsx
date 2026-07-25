@@ -39,11 +39,15 @@ const statusConfig: Record<
 export function CasesTable({
   cases,
   archivingCaseId,
+  deletingCaseId,
   onArchiveCase,
+  onDeleteCase,
 }: {
   cases: Case[]
   archivingCaseId?: string
+  deletingCaseId?: string
   onArchiveCase: (caseItem: Case) => void
+  onDeleteCase?: (caseItem: Case) => void
 }) {
   const navigate = useNavigate()
 
@@ -169,7 +173,9 @@ export function CasesTable({
                     <CaseActionsMenu
                       caseItem={caseItem}
                       isArchiving={archivingCaseId === caseItem.id}
+                      isDeleting={deletingCaseId === caseItem.id}
                       onArchiveCase={onArchiveCase}
+                      onDeleteCase={onDeleteCase}
                     />
                   </div>
                 </TableCell>

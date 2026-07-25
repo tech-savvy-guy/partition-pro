@@ -1257,7 +1257,7 @@ class CasePreprocessingFlowTests(TestCase):
         self.assertEqual(response.status_code, 202)
         self.assertEqual(response.data["status"], "QUEUED")
         task.apply_async.assert_called_once_with(
-            args=[str(self.case.id)], queue="preprocess"
+            args=[str(self.case.id)], queue="preprocessing"
         )
 
     @patch("core.views.preprocess_case_task")

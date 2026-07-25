@@ -15,12 +15,16 @@ export function CaseRow({
   caseItem,
   isLast,
   isArchiving,
+  isDeleting,
   onArchiveCase,
+  onDeleteCase,
 }: {
   caseItem: Case
   isLast: boolean
   isArchiving: boolean
+  isDeleting?: boolean
   onArchiveCase: (caseItem: Case) => void
+  onDeleteCase?: (caseItem: Case) => void
 }) {
   const updatedAt = formatDate(caseItem.updated_at)
 
@@ -53,7 +57,9 @@ export function CaseRow({
           <CaseActionsMenu
             caseItem={caseItem}
             isArchiving={isArchiving}
+            isDeleting={isDeleting}
             onArchiveCase={onArchiveCase}
+            onDeleteCase={onDeleteCase}
           />
         </div>
       </div>

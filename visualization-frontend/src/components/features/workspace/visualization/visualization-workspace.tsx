@@ -92,11 +92,13 @@ export function VisualizationWorkspace({
   caseId,
   partitionId,
   node,
+  canEdit,
 }: {
   visualizationResult?: VisualizationResult | null
   caseId?: string
   partitionId?: string
   node?: WorkflowNodeObject | null
+  canEdit: boolean
 }) {
   const queryClient = useQueryClient()
   const { showToast } = useUI()
@@ -224,14 +226,18 @@ export function VisualizationWorkspace({
   }, [])
 
   const saveColorsMutation = useMutation({
-    mutationFn: () =>
-      WorkflowApi.savePartitionTreeColors(
+    mutationFn: () => {
+      if (!canEdit) {
+        throw new Error("Acquire the partition lock before saving colors.")
+      }
+      return WorkflowApi.savePartitionTreeColors(
         caseId!,
         partitionId!,
         node!.id,
         selectedAttribute!,
         valueColors
-      ),
+      )
+    },
     onSuccess: () => {
       showToast("Colors saved", "success")
       void queryClient.invalidateQueries({
@@ -247,13 +253,17 @@ export function VisualizationWorkspace({
   })
 
   const breakMutation = useMutation({
-    mutationFn: () =>
-      WorkflowApi.selectPartitionTreeAttribute(
+    mutationFn: () => {
+      if (!canEdit) {
+        throw new Error("Acquire the partition lock before changing the tree.")
+      }
+      return WorkflowApi.selectPartitionTreeAttribute(
         caseId!,
         partitionId!,
         node!.id,
         selectedAttribute!
-      ),
+      )
+    },
     onSuccess: () => {
       showToast(`Tree broken at "${selectedAttribute}"`, "success")
       void queryClient.invalidateQueries({
@@ -718,6 +728,7 @@ export function VisualizationWorkspace({
                       label={value}
                       value={valueColors[value]}
                       fallback={fallback}
+                      disabled={!canEdit}
                       onChange={(hex) => setValueColor(value, hex)}
                       onClear={() => setValueColor(value, fallback)}
                     />
@@ -740,7 +751,9 @@ export function VisualizationWorkspace({
               variant="outline"
               size="sm"
               disabled={
-                saveColorsMutation.isPending || attributeValues.length === 0
+                !canEdit ||
+                saveColorsMutation.isPending ||
+                attributeValues.length === 0
               }
               onClick={() => saveColorsMutation.mutate()}
               className="w-full justify-center"
@@ -755,7 +768,11 @@ export function VisualizationWorkspace({
             <Button
               type="button"
               size="sm"
-              disabled={breakMutation.isPending || attributeValues.length <= 1}
+              disabled={
+                !canEdit ||
+                breakMutation.isPending ||
+                attributeValues.length <= 1
+              }
               onClick={() => breakMutation.mutate()}
               title={
                 attributeValues.length <= 1

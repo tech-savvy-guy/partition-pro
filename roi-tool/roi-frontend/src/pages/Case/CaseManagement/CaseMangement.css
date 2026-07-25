@@ -1,9 +1,0 @@
-/* Fix extra right padding inside BDS accordion for Case Management */
-.case-management-accordion .cds--accordion__content {
-  padding-right: 16px !important;
-}
-/* Optional: bump accordion header height for the case management page */
-.case-management-accordion .cds--accordion__heading {
-  padding-top: 10px;
-  padding-bottom: 10px;
-}

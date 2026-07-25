@@ -1,4 +1,7 @@
-import axios, { type AxiosProgressEvent } from "axios"
+import axios, {
+  type AxiosProgressEvent,
+  type AxiosRequestConfig,
+} from "axios"
 
 import { http } from "@/core/api/http"
 import type {
@@ -18,6 +21,7 @@ import type {
   PartitionDatasetDownloadResponse,
   PartitionDatasetsResponse,
   PartitionDatasetUploadUrlResponse,
+  PartitionLockResponse,
   PartitionTreeAttributeSelectionResponse,
   PartitionTreeNodeResponse,
   PartitionTreePreviewRollupPayload,
@@ -53,6 +57,8 @@ export const CaseApi = {
     http.post<Case>(Endpoints.cases.list, payload),
   updateCase: (caseId: string, payload: UpdateCasePayload) =>
     http.patch<Case>(Endpoints.cases.detail(caseId), payload),
+  deleteCase: (caseId: string) =>
+    http.delete<void>(Endpoints.cases.detail(caseId)),
   getPreprocessingStatus: (caseId: string) =>
     http.get<PreprocessingStatusResponse>(
       Endpoints.cases.preprocessingStatus(caseId)
@@ -74,13 +80,25 @@ export const PartitionApi = {
     http.get<Partition[]>(Endpoints.cases.partitions(caseId)),
   getPartition: (caseId: string, partitionId: string) =>
     http.get<Partition>(Endpoints.cases.partitionDetail(caseId, partitionId)),
-  acquireLock: (caseId: string, partitionId: string) =>
-    http.post<{ locked_by: string; lock_expires_at: string }>(
+  acquireLock: (
+    caseId: string,
+    partitionId: string,
+    config?: AxiosRequestConfig
+  ) =>
+    http.post<PartitionLockResponse>(
       Endpoints.cases.partitionLock(caseId, partitionId),
-      {}
+      {},
+      config
     ),
-  releaseLock: (caseId: string, partitionId: string) =>
-    http.delete<void>(Endpoints.cases.partitionLock(caseId, partitionId)),
+  releaseLock: (
+    caseId: string,
+    partitionId: string,
+    config?: AxiosRequestConfig
+  ) =>
+    http.delete<void>(
+      Endpoints.cases.partitionLock(caseId, partitionId),
+      config
+    ),
   createPartition: (caseId: string, payload: CreatePartitionPayload) =>
     http.post<Partition>(Endpoints.cases.partitions(caseId), payload),
   getPartitionDatasets: (caseId: string, partitionId: string) =>

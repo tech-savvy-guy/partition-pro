@@ -35,6 +35,9 @@ import {
   type CaseStatus as CaseStatusValue,
   type CreateCasePayload,
 } from "@/core/api"
+import {
+  SELECTABLE_METHODOLOGIES,
+} from "@/core/workflow"
 import { useUI } from "@/core/ui"
 import { Permission, RequirePermission } from "@/core/rbac"
 import { XIcon, PlusIcon } from "lucide-react"
@@ -280,16 +283,39 @@ function NewCaseWorkspace() {
             </Field>
 
             <div className="grid gap-5 sm:grid-cols-2">
-              <Field>
+              <Field data-invalid={Boolean(errors.methodology)}>
                 <FieldLabel htmlFor="case-methodology">Methodology</FieldLabel>
-                <Input
-                  id="case-methodology"
-                  value={values.methodology}
-                  onChange={(event) =>
-                    updateField("methodology", event.target.value)
+                <Select
+                  value={values.methodology || undefined}
+                  onValueChange={(value) =>
+                    updateField("methodology", value ?? "")
                   }
-                  placeholder="ROI"
-                />
+                >
+                  <SelectTrigger
+                    id="case-methodology"
+                    className="w-full"
+                    aria-invalid={Boolean(errors.methodology)}
+                  >
+                    <SelectValue placeholder="Select methodology">
+                      {SELECTABLE_METHODOLOGIES.find(
+                        (option) => option.value === values.methodology
+                      )?.label}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectGroup>
+                      {SELECTABLE_METHODOLOGIES.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+                <FieldDescription>
+                  Determines the partition workflow after datasets are ready.
+                </FieldDescription>
+                <FieldError>{errors.methodology}</FieldError>
               </Field>
 
               <Field>
@@ -428,6 +454,14 @@ function validateForm(values: FormValues): {
     errors.code = "Code is required."
   }
 
+  const methodology = values.methodology.trim()
+  if (
+    !methodology ||
+    !SELECTABLE_METHODOLOGIES.some((option) => option.value === methodology)
+  ) {
+    errors.methodology = "Select ROI or Visualization."
+  }
+
   if (Object.keys(errors).length > 0) {
     return { errors }
   }
@@ -438,7 +472,7 @@ function validateForm(values: FormValues): {
       name,
       code,
       description: values.description.trim(),
-      methodology: values.methodology.trim(),
+      methodology,
       category: values.category.trim(),
       status: values.status,
       tags: values.tags.length > 0 ? { labels: values.tags } : {},

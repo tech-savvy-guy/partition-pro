@@ -314,13 +314,19 @@ export default function LevelTesting({
   }, [selectedAttributeId, rightExpanded]);
 
   return (
-    <div className="mt-2 flex h-full flex-col">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-background">
       {/* GLOBAL ACTION BAR */}
-      <div className="flex items-center justify-end px-6 pb-2 bg-white border-b border-gray-200">
+      <div className="flex min-h-12 flex-shrink-0 items-center justify-between gap-4 border-b border-border bg-background px-6 py-2">
+        <div>
+          <p className="text-sm font-semibold text-foreground">Level Testing</p>
+          <p className="text-[11px] text-muted-foreground">
+            Compare performance and choose the strongest partition attribute.
+          </p>
+        </div>
         {canEditWorkflow && (
           <Button
             size="sm"
-            className="px-4 py-[2px] text-[11px]"
+            className="h-8 px-4 text-[11px] font-semibold shadow-sm"
             onClick={handleSubmit}
             disabled={
               readOnly || !selectedAttributeId || !onSubmitSelectedAttribute
@@ -332,11 +338,13 @@ export default function LevelTesting({
       </div>
 
       {/* headers */}
-      <div className="flex border-b border-gray-200 bg-gray-50 text-xs text-gray-800">
+      <div className="flex flex-shrink-0 border-b border-border bg-muted/30 text-xs text-foreground">
         {/* Left header only when NOT expanded */}
         {!rightExpanded && (
-          <div className="flex w-1/2 items-center gap-4 border-r border-gray-200 bg-gray-200 px-6 py-2">
-            <span className="font-semibold">LEVEL TESTING RESULTS</span>
+          <div className="flex w-1/2 items-center gap-4 border-r border-border bg-muted/60 px-6 py-3">
+            <span className="text-[11px] font-semibold uppercase tracking-[0.08em]">
+              Level Testing Results
+            </span>
           </div>
         )}
 
@@ -344,34 +352,34 @@ export default function LevelTesting({
         <div
           className={`flex ${
             rightExpanded ? "w-full" : "w-1/2"
-          } items-end px-6`}
+          } items-center px-6 py-3`}
         >
-          <div className="flex w-full items-end justify-between gap-3">
-            <span className="pb-1 text-[13px] border-b-2 border-red-600 font-semibold text-gray-900">
-              Detailed Results of
-              <span className="rounded-md px-2 py-[2px] text-[11px] font-semibold text-gray-900">
+          <div className="flex w-full items-center justify-between gap-3">
+            <span className="flex min-w-0 items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-foreground">
+              <span>Detailed Results</span>
+              <span className="normal-case tracking-normal">
                 {(() => {
                   return (
                     <span
                       className={[
-                        "rounded-md px-2 py-[3px] text-[11px] font-semibold",
-                        "bg-gray-200 text-gray-900",
+                        "inline-flex max-w-[220px] truncate rounded-md border border-border",
+                        "bg-background px-2 py-1 text-[11px] font-medium text-foreground shadow-sm",
                       ].join(" ")}
                     >
-                      {selectedAttributeId}
+                      {selectedAttributeId ?? "No attribute selected"}
                     </span>
                   );
                 })()}
               </span>
             </span>
 
-            <div className="flex items-center gap-2 mb-1">
+            <div className="flex items-center gap-2">
               {/* Expand / Collapse */}
               {selectedAttributeId ? (
                 <button
                   type="button"
                   onClick={() => setRightExpanded((v) => !v)}
-                  className="rounded border border-gray-300 bg-white px-3 py-[2px] text-[11px] font-semibold text-gray-700 hover:bg-gray-100"
+                  className="rounded-md border border-border bg-background px-3 py-1.5 text-[11px] font-medium text-foreground shadow-sm transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 >
                   {rightExpanded ? "Collapse Result" : "Expand Result"}
                 </button>
@@ -384,7 +392,7 @@ export default function LevelTesting({
       <div className="flex flex-1 overflow-hidden">
         {/* LEFT (hidden when expanded) */}
         {!rightExpanded && (
-          <div className="w-1/2 border-r border-gray-200 bg-gray-100 overflow-auto">
+          <div className="w-1/2 overflow-auto border-r border-border bg-muted/20">
             <LevelTestingResults
               rows={rows}
               selectedAttributeId={selectedAttributeId}
@@ -398,11 +406,19 @@ export default function LevelTesting({
         <div
           className={`${
             rightExpanded ? "w-full" : "w-1/2"
-          } bg-white overflow-y-auto h-[70vh]`}
+          } h-full min-h-0 overflow-y-auto bg-background`}
         >
           {!selectedAttributeId ? (
-            <div className="flex h-full items-start justify-center px-6 pt-4 text-[11px] text-gray-500">
-              Please select attribute to see detailed result
+            <div className="flex h-full items-center justify-center p-8">
+              <div className="max-w-xs rounded-lg border border-dashed border-border bg-muted/20 px-6 py-8 text-center">
+                <p className="text-sm font-medium text-foreground">
+                  Select an attribute
+                </p>
+                <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                  Choose an attribute from the results to compare its detailed
+                  level-testing performance.
+                </p>
+              </div>
             </div>
           ) : (
             <DetailedResultsWithPartitionTree

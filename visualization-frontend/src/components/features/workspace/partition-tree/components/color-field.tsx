@@ -11,6 +11,7 @@ type ColorFieldProps = {
   onChange: (hex: string) => void;
   onClear: () => void;
   action?: React.ReactNode;
+  disabled?: boolean;
 };
 
 export function ColorField({
@@ -20,6 +21,7 @@ export function ColorField({
   onChange,
   onClear,
   action,
+  disabled = false,
 }: ColorFieldProps) {
   const [draft, setDraft] = useState(value ?? "");
   const textRef = useRef<HTMLInputElement>(null);
@@ -57,6 +59,7 @@ export function ColorField({
           {/* Swatch — triggers the native colour picker */}
           <button
             type="button"
+            disabled={disabled}
             onClick={() => colorRef.current?.click()}
             className="relative size-5 shrink-0 cursor-pointer rounded-[5px] ring-1 ring-inset ring-black/15 transition-transform active:scale-95 dark:ring-white/20"
             style={{ backgroundColor: resolved }}
@@ -66,6 +69,7 @@ export function ColorField({
             <input
               ref={colorRef}
               type="color"
+              disabled={disabled}
               value={resolved}
               onChange={(e) => {
                 onChange(e.target.value);
@@ -79,6 +83,7 @@ export function ColorField({
           <input
             ref={textRef}
             type="text"
+            disabled={disabled}
             value={draft}
             spellCheck={false}
             onChange={(e) => {
@@ -99,6 +104,7 @@ export function ColorField({
         {isOverridden && (
           <button
             type="button"
+            disabled={disabled}
             onClick={onClear}
             title="Reset to default"
             aria-label="Reset to default"

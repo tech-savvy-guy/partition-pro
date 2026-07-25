@@ -8,6 +8,7 @@ export const Permission = {
 
   ViewCases: "cases.view",
   CreateCases: "cases.create",
+  DeleteCases: "cases.delete",
 
   ViewPartitions: "partitions.view",
   CreatePartitions: "partitions.create",

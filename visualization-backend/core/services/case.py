@@ -1,7 +1,22 @@
-from core.models import Case, CaseUserAssignment, Dataset
+import logging
+
+from django.db import transaction
+
+from core.models import (
+    Case,
+    CaseUserAssignment,
+    Dataset,
+    Metadata,
+    RawAttributesData,
+    RawCrossPurchaseData,
+    RawPosData,
+)
+from core.services.storage import delete_blob
 from core.services.users import serialize_user_summary
 from core.services.utils import clean_text
 from security.rbac import Permission, user_has_permission
+
+logger = logging.getLogger(__name__)
 
 
 def get_active_case(case_id):
@@ -21,6 +36,39 @@ def get_active_dataset(case_id, dataset_id):
         )
     except (Dataset.DoesNotExist, ValueError):
         return None
+
+
+def purge_case(case: Case) -> None:
+    """Permanently delete a case and all related app data + Azure dataset blobs.
+
+    UUID-keyed tables (Metadata, raw dataset rows) have no FK cascade and are
+    deleted explicitly. Assignments, datasets, partitions, and workflows cascade
+    from ``case.delete()``. Azure blobs are removed best-effort after the DB
+    commit so the case disappears from the app even if storage cleanup fails.
+    """
+    case_id = case.id
+    blob_names = list(
+        Dataset.objects.filter(case_id=case_id)
+        .exclude(blob_name="")
+        .values_list("blob_name", flat=True)
+    )
+
+    with transaction.atomic():
+        Metadata.objects.filter(case_id=case_id).delete()
+        RawPosData.objects.filter(case_id=case_id).delete()
+        RawAttributesData.objects.filter(case_id=case_id).delete()
+        RawCrossPurchaseData.objects.filter(case_id=case_id).delete()
+        case.delete()
+
+    for blob_name in blob_names:
+        try:
+            delete_blob(blob_name)
+        except Exception:
+            logger.exception(
+                "Failed to delete Azure blob %s after purging case %s",
+                blob_name,
+                case_id,
+            )
 
 
 def can_create_partition(user, case):

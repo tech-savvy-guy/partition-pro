@@ -34,6 +34,8 @@ export type {
   UpdateCasePayload,
   UpdateSkuSelectionPayload,
   Partition,
+  PartitionLockConflict,
+  PartitionLockResponse,
   PartitionDatasetConfirmUploadPayload,
   PartitionDatasetConfirmUploadResponse,
   PartitionDatasetDataType,

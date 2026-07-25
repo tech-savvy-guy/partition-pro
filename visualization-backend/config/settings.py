@@ -127,7 +127,7 @@ CELERY_TASK_ROUTES = {
     "core.tasks.compute_roi_task": {"queue": "roi"},
     "core.tasks.compute_node_testing_task": {"queue": "roi"},
     "core.tasks.compute_obm_task": {"queue": "roi"},
-    "core.tasks.preprocess_case_task": {"queue": "preprocess"},
+    "core.tasks.preprocess_case_task": {"queue": "preprocessing"},
 }
 
 # Partition edit-lock TTL (seconds). PartitionLockView acquires/renews with

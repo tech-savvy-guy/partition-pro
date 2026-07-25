@@ -4,6 +4,7 @@ import {
   ArrowRightIcon,
   MoreVerticalIcon,
   PencilIcon,
+  Trash2Icon,
 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -15,16 +16,23 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import type { Case } from "@/core/api"
+import { Permission, useRbac } from "@/core/rbac"
 
 export function CaseActionsMenu({
   caseItem,
   isArchiving,
+  isDeleting,
   onArchiveCase,
+  onDeleteCase,
 }: {
   caseItem: Case
   isArchiving: boolean
+  isDeleting?: boolean
   onArchiveCase: (caseItem: Case) => void
+  onDeleteCase?: (caseItem: Case) => void
 }) {
+  const rbac = useRbac()
+  const canDelete = rbac.can(Permission.DeleteCases)
   const isArchived = caseItem.status === "archived"
 
   return (
@@ -68,13 +76,23 @@ export function CaseActionsMenu({
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem
-          disabled={isArchived || isArchiving}
+          disabled={isArchived || isArchiving || isDeleting}
           onClick={() => onArchiveCase(caseItem)}
           variant="destructive"
         >
           <ArchiveIcon className="size-3.5" aria-hidden="true" />
           {isArchiving ? "Archiving case..." : "Archive case"}
         </DropdownMenuItem>
+        {canDelete && onDeleteCase ? (
+          <DropdownMenuItem
+            disabled={isDeleting || isArchiving}
+            onClick={() => onDeleteCase(caseItem)}
+            variant="destructive"
+          >
+            <Trash2Icon className="size-3.5" aria-hidden="true" />
+            {isDeleting ? "Deleting case..." : "Delete case"}
+          </DropdownMenuItem>
+        ) : null}
       </DropdownMenuContent>
     </DropdownMenu>
   )

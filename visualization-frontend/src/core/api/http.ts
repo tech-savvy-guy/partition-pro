@@ -19,8 +19,8 @@ export const http = {
     const response = await axiosClient.patch<T>(url, body)
     return response.data
   },
-  async delete<T>(url: string): Promise<T> {
-    const response = await axiosClient.delete<T>(url)
+  async delete<T>(url: string, config?: AxiosRequestConfig): Promise<T> {
+    const response = await axiosClient.delete<T>(url, config)
     return response.data
   },
 }

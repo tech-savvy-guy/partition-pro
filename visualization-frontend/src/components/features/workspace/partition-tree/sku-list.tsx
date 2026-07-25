@@ -2,6 +2,7 @@ import * as React from "react";
 import "./partition-tree.css";
 
 import { DataGrid, type DataGridColumn } from "./components/data-grid";
+import { PackageSearchIcon } from "lucide-react";
 
 type SkuListPayload = {
   columns?: Array<string | number | boolean | null>;
@@ -139,46 +140,78 @@ export default function SKUList({ data }: Props) {
 
   if (!skuList) {
     return (
-      <div className="p-4 text-[13px] text-gray-600">
-        SKU List is not available yet.
+      <div className="flex h-full min-h-0 items-center justify-center bg-background p-8">
+        <div className="flex max-w-sm flex-col items-center gap-3 text-center">
+          <span className="flex size-10 items-center justify-center rounded-full bg-muted text-muted-foreground">
+            <PackageSearchIcon className="size-5" />
+          </span>
+          <div>
+            <p className="text-sm font-medium text-foreground">
+              SKU list is not available yet
+            </p>
+            <p className="mt-1 text-xs leading-5 text-muted-foreground">
+              SKUs will appear here after the workflow has prepared the
+              partition data.
+            </p>
+          </div>
+        </div>
       </div>
     );
   }
 
   if (!columns.length || !tableRows.length) {
     return (
-      <div className="p-4 text-[13px] text-gray-600">
-        No SKU List data returned.
+      <div className="flex h-full min-h-0 items-center justify-center bg-background p-8">
+        <div className="flex max-w-sm flex-col items-center gap-3 text-center">
+          <span className="flex size-10 items-center justify-center rounded-full bg-muted text-muted-foreground">
+            <PackageSearchIcon className="size-5" />
+          </span>
+          <div>
+            <p className="text-sm font-medium text-foreground">No SKUs found</p>
+            <p className="mt-1 text-xs leading-5 text-muted-foreground">
+              This workflow completed without returning SKU rows.
+            </p>
+          </div>
+        </div>
       </div>
     );
   }
 
   const headerBar = (
-    <div className="flex items-center justify-between border border-gray-200 rounded-t-md bg-gray-50 px-3 py-2">
-      <div className="flex flex-col">
-        <div className="text-xs text-gray-500 mt-0.5 flex items-center gap-2">
-          <span className="text-xs text-gray-600">
-            <span className="font-semibold">Available SKUs:</span> {visibleCount}
-          </span>
+    <div className="flex shrink-0 items-center justify-between border-b border-border bg-muted/20 px-6 py-3">
+      <div className="flex min-w-0 items-center gap-3">
+        <span className="flex size-9 shrink-0 items-center justify-center rounded-md border border-border bg-background text-muted-foreground shadow-xs">
+          <PackageSearchIcon className="size-4" />
+        </span>
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-foreground">Available SKUs</p>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            Filter any column to narrow the result set.
+          </p>
         </div>
+      </div>
+      <div className="shrink-0 rounded-md border border-border bg-background px-3 py-2 text-xs tabular-nums text-muted-foreground shadow-xs">
+        <span className="font-semibold text-foreground">{visibleCount}</span>{" "}
+        {visibleCount === 1 ? "SKU" : "SKUs"}
       </div>
     </div>
   );
 
   return (
-    <div>
+    <div className="flex h-full min-h-0 w-full min-w-0 flex-col bg-background">
       {headerBar}
 
-      <div className="relative">
+      <div className="relative min-h-0 flex-1 overflow-hidden">
         <DataGrid<Record<string, any>>
           rows={tableRows}
           rowKey={(row) => String(row.__rowKey)}
           columns={gridColumns}
           showGridlines
           scrollable
-          scrollHeight="65vh"
-          className="app-table sku-selection-table cases-header-grey rounded-b-md"
-          emptyMessage="No SKU rows."
+          scrollHeight="100%"
+          wrapperClassName="h-full w-full"
+          className="app-table sku-selection-table cases-header-grey [&_thead]:sticky [&_thead]:top-0 [&_thead]:z-10 [&_thead]:bg-muted/95 [&_thead]:backdrop-blur-sm"
+          emptyMessage="No SKUs match the current filters."
           onVisibleRowsChange={handleVisibleRowsChange}
         />
       </div>

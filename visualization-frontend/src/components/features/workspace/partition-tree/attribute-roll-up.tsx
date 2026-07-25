@@ -45,7 +45,7 @@ type Props = {
 };
 
 export default function AttributeRollUp({ onClose }: Props) {
-  const { caseId, partitionId, notify } = usePartitionTreeContext();
+  const { caseId, partitionId, notify, readOnly } = usePartitionTreeContext();
 
   // ── Datasets state ─────────────────────────────────────────────────────
   const [datasets, setDatasets] = useState<Dataset[]>([]);
@@ -56,7 +56,7 @@ export default function AttributeRollUp({ onClose }: Props) {
   const [initViewUrl, setInitViewUrl] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!caseId || !partitionId) { setInitStatus("ready"); return; }
+    if (readOnly || !caseId || !partitionId) { setInitStatus("ready"); return; }
     const dataType: PartitionDatasetDataType = "GROUPING";
     PartitionApi.getDatasetUploadUrl(caseId, partitionId, dataType, "rollup-sheet.csv")
       .then((res) => {
@@ -65,7 +65,7 @@ export default function AttributeRollUp({ onClose }: Props) {
       })
       .catch(() => { /* fail silently — user can still upload */ })
       .finally(() => setInitStatus("ready"));
-  }, [caseId, partitionId]);
+  }, [caseId, partitionId, readOnly]);
 
   // ── Fetch partition datasets on mount ─────────────────────────────────
   useEffect(() => {
@@ -94,6 +94,7 @@ export default function AttributeRollUp({ onClose }: Props) {
   const dragCounter = React.useRef(0);
 
   const applyFile = (file: File) => {
+    if (readOnly) return;
     const validation = validateFile(file);
     if (validation.valid) {
       setSelectedFile(file);
@@ -139,7 +140,7 @@ export default function AttributeRollUp({ onClose }: Props) {
   };
 
   const handleUpload = async () => {
-    if (!selectedFile || !caseId || !partitionId) return;
+    if (readOnly || !selectedFile || !caseId || !partitionId) return;
     setUploadStatus("uploading");
     setErrorMessage(null);
     setUploadError(null);
@@ -359,6 +360,7 @@ export default function AttributeRollUp({ onClose }: Props) {
         >
           <input
             type="file"
+            disabled={readOnly}
             id="file-upload"
             className="hidden"
             onChange={handleFileChange}
@@ -416,7 +418,7 @@ export default function AttributeRollUp({ onClose }: Props) {
           </Button>
           <Button
             size="sm"
-            disabled={!selectedFile || uploadStatus === "uploading"}
+            disabled={readOnly || !selectedFile || uploadStatus === "uploading"}
             onClick={handleUpload}
           >
             {uploadStatus === "uploading" ? "Uploading..." : "Upload"}

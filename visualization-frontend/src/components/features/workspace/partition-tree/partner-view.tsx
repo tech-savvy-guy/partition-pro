@@ -762,8 +762,16 @@ export default function PartnerView({ baseTesting, levelTesting }: Props) {
 
   if (!cards.length) {
     return (
-      <div className="flex h-full items-center justify-center p-8 text-sm text-gray-500">
-        Partner view data is not available yet.
+      <div className="flex h-full items-center justify-center bg-background p-8">
+        <div className="max-w-sm rounded-lg border border-dashed border-border bg-muted/20 px-8 py-10 text-center">
+          <p className="text-sm font-medium text-foreground">
+            Partner view is not available yet
+          </p>
+          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+            Results will appear here after base and level testing data is
+            available.
+          </p>
+        </div>
       </div>
     );
   }
@@ -775,18 +783,23 @@ export default function PartnerView({ baseTesting, levelTesting }: Props) {
     const showLevelTestingPane = !baseMapExpanded;
 
     return (
-      <div className="flex h-full min-h-0 flex-col overflow-hidden">
-        <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3">
-          <h3 className="text-[18px] font-semibold text-gray-900">
-            {selectedCard.attribute}
-          </h3>
+      <div className="flex h-full min-h-0 flex-col overflow-hidden bg-background">
+        <div className="flex flex-shrink-0 items-center justify-between gap-4 border-b border-border bg-background px-5 py-3">
+          <div className="min-w-0">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+              Attribute analysis
+            </p>
+            <h3 className="truncate text-lg font-semibold tracking-tight text-foreground">
+              {selectedCard.attribute}
+            </h3>
+          </div>
           <button
             type="button"
             onClick={() => setSelectedAttributeKey(null)}
-            className="inline-flex items-center gap-2 border border-red-200 px-3 py-1.5 text-[12px] font-medium text-red-600 transition-colors hover:bg-red-50"
+            className="inline-flex items-center gap-2 rounded-md border border-border bg-background px-3 py-1.5 text-[12px] font-medium text-foreground shadow-sm transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
           >
             <ArrowLeft size={14} />
-            Go Back
+            Back to overview
           </button>
         </div>
 
@@ -802,36 +815,36 @@ export default function PartnerView({ baseTesting, levelTesting }: Props) {
               } min-h-0 ${
                 showLevelTestingPane
                   ? expandedDetailPanel
-                    ? "border-r border-gray-200"
-                    : "border-b border-gray-200 xl:border-b-0 xl:border-r"
+                    ? "border-r border-border"
+                    : "border-b border-border xl:border-b-0 xl:border-r"
                   : ""
-              } bg-gray-50`}
+              } bg-muted/20`}
             >
-            <div className="h-full overflow-auto p-3">
-              <section className="border border-gray-200 bg-white">
+            <div className="h-full overflow-auto p-4">
+              <section className="overflow-hidden rounded-lg border border-border bg-background shadow-sm">
                 <button
                   type="button"
                   onClick={() => setSummaryExpanded((prev) => !prev)}
-                  className="flex w-full items-center justify-between border-b border-gray-200 px-4 py-3 text-left hover:bg-gray-50"
+                  className="flex w-full items-center justify-between border-b border-border bg-muted/30 px-4 py-3 text-left transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
                   aria-expanded={summaryExpanded}
                 >
-                  <h4 className="text-sm font-semibold uppercase tracking-[0.08em] text-gray-800">
+                  <h4 className="text-[11px] font-semibold uppercase tracking-[0.1em] text-foreground">
                     Summary
                   </h4>
                   {summaryExpanded ? (
-                    <ChevronUp size={14} className="text-gray-400" />
+                    <ChevronUp size={14} className="text-muted-foreground" />
                   ) : (
-                    <ChevronDown size={14} className="text-gray-400" />
+                    <ChevronDown size={14} className="text-muted-foreground" />
                   )}
                 </button>
                 {summaryExpanded ? (
-                <div className="p-3">
+                <div className="p-4">
                   {selectedSummary.rows.length ? (
                     <DataGrid<SummaryTableRow>
                       rows={selectedSummary.rows}
                       rowKey={(row) => String(row.id)}
                       showGridlines
-                      className="rounded-sm cases-header-grey"
+                      className="overflow-hidden rounded-md cases-header-grey"
                       emptyMessage="No summary data available."
                       columns={[
                         {
@@ -866,7 +879,7 @@ export default function PartnerView({ baseTesting, levelTesting }: Props) {
                       ]}
                     />
                   ) : (
-                    <div className="text-sm text-gray-500">
+                    <div className="rounded-md border border-dashed border-border bg-muted/20 px-4 py-8 text-center text-xs text-muted-foreground">
                       No summary values available for this attribute.
                     </div>
                   )}
@@ -874,19 +887,21 @@ export default function PartnerView({ baseTesting, levelTesting }: Props) {
                 ) : null}
               </section>
 
-              <section className="mt-3 border border-gray-200 bg-white">
-                <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3">
+              <section className="mt-4 overflow-hidden rounded-lg border border-border bg-background shadow-sm">
+                <div className="flex items-center justify-between border-b border-border bg-muted/30 px-4 py-3">
                   <button
                     type="button"
                     onClick={() => setBaseMathSectionExpanded((prev) => !prev)}
-                    className="inline-flex items-center gap-2 text-left hover:opacity-80"
+                    className="inline-flex items-center gap-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     aria-expanded={baseMathSectionExpanded}
                   >
-                    <h4 className="text-sm font-semibold text-gray-800">Base Math</h4>
+                    <h4 className="text-[11px] font-semibold uppercase tracking-[0.1em] text-foreground">
+                      Base Math
+                    </h4>
                     {baseMathSectionExpanded ? (
-                      <ChevronUp size={14} className="text-gray-400" />
+                      <ChevronUp size={14} className="text-muted-foreground" />
                     ) : (
-                      <ChevronDown size={14} className="text-gray-400" />
+                      <ChevronDown size={14} className="text-muted-foreground" />
                     )}
                   </button>
                   <button
@@ -896,7 +911,7 @@ export default function PartnerView({ baseTesting, levelTesting }: Props) {
                         prev === "base-map" ? null : "base-map",
                       )
                     }
-                    className="rounded border border-gray-300 bg-white px-3 py-1 text-[11px] font-semibold text-gray-700 hover:bg-gray-100"
+                    className="rounded-md border border-border bg-background px-3 py-1.5 text-[11px] font-medium text-foreground shadow-sm transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                   >
                     {baseMapExpanded ? "Collapse" : "Expand"}
                   </button>
@@ -910,7 +925,7 @@ export default function PartnerView({ baseTesting, levelTesting }: Props) {
                       showCsvDownload={false}
                     />
                   ) : (
-                    <div className="p-4 text-sm text-gray-500">
+                    <div className="m-4 rounded-md border border-dashed border-border bg-muted/20 px-4 py-8 text-center text-xs text-muted-foreground">
                       Base math details are not available for this attribute.
                     </div>
                   )
@@ -924,15 +939,15 @@ export default function PartnerView({ baseTesting, levelTesting }: Props) {
             <div
               className={`${
                 levelTestingExpanded ? "w-full" : "w-full xl:w-1/2"
-              } min-h-0 bg-white`}
+              } min-h-0 bg-background`}
             >
             <div className="flex h-full min-h-0 flex-col">
-              <div className="flex items-center justify-between border-b border-gray-200 bg-gray-50 px-4 py-2">
-                <div>
-                  <span className="text-[13px] font-semibold text-gray-900">
-                    Detailed Results of
+              <div className="flex min-h-12 flex-shrink-0 items-center justify-between gap-3 border-b border-border bg-muted/30 px-4 py-2">
+                <div className="flex min-w-0 items-center gap-2">
+                  <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-foreground">
+                    Detailed Results
                   </span>
-                  <span className="ml-2 rounded-md bg-gray-200 px-2 py-[2px] text-[11px] font-semibold text-gray-900">
+                  <span className="max-w-[220px] truncate rounded-md border border-border bg-background px-2 py-1 text-[11px] font-medium text-foreground shadow-sm">
                     {selectedComparisonAttribute ?? selectedCard.attribute}
                   </span>
                 </div>
@@ -943,7 +958,7 @@ export default function PartnerView({ baseTesting, levelTesting }: Props) {
                       prev === "level-testing-map" ? null : "level-testing-map",
                     )
                   }
-                  className="rounded border border-gray-300 bg-white px-3 py-1 text-[11px] font-semibold text-gray-700 hover:bg-gray-100"
+                  className="rounded-md border border-border bg-background px-3 py-1.5 text-[11px] font-medium text-foreground shadow-sm transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 >
                   {levelTestingExpanded
                     ? "Collapse"
@@ -968,24 +983,27 @@ export default function PartnerView({ baseTesting, levelTesting }: Props) {
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-auto">
-      <div className="border-b border-gray-200 bg-slate-50/60 px-4 py-3 md:px-6">
-        <div className="flex items-stretch justify-between gap-5">
-          <div className="flex items-stretch bg-white text-[12px] text-slate-700">
+    <div className="flex h-full min-h-0 flex-col overflow-auto bg-background">
+      <div className="flex-shrink-0 border-b border-border bg-muted/20 px-4 py-4 md:px-6">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-stretch lg:justify-between">
+          <div className="flex overflow-hidden rounded-lg border border-border bg-background text-[12px] text-foreground shadow-sm">
             <div
-              className="px-4 py-2 min-w-[180px]"
-              style={{ borderRight: "2px solid #d1d5db" }}
+              className="min-w-[180px] border-r border-border px-5 py-3"
             >
-              <div className="font-semibold text-slate-500">Total Attributes</div>
-              <div className="mt-1 text-[18px] font-semibold leading-none text-slate-900">
+              <div className="text-[10px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
+                Total Attributes
+              </div>
+              <div className="mt-1.5 text-xl font-semibold leading-none tracking-tight text-foreground">
                 {formatStatCount(totalAttributes)}
               </div>
             </div>
-            <div className="px-4 py-2 min-w-[220px]">
-              <div className="font-semibold text-slate-500">Holding In Base Math</div>
-              <div className="mt-1 text-[18px] font-semibold leading-none text-slate-900">
+            <div className="min-w-[220px] px-5 py-3">
+              <div className="text-[10px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
+                Holding in Base Math
+              </div>
+              <div className="mt-1.5 text-xl font-semibold leading-none tracking-tight text-foreground">
                 {formatStatCount(holdsCount)}
-                <span className="ml-2 text-sm font-medium text-slate-600">
+                <span className="ml-2 text-sm font-medium text-muted-foreground">
                   ({holdsPct}%)
                 </span>
               </div>
@@ -993,11 +1011,12 @@ export default function PartnerView({ baseTesting, levelTesting }: Props) {
           </div>
 
           <div
-            className="max-w-[55%] self-stretch pl-5 py-2 text-[12px] text-slate-700"
-            style={{ borderLeft: "2px solid #d1d5db" }}
+            className="max-w-2xl self-stretch rounded-lg border border-border bg-background px-5 py-3 text-[12px] text-muted-foreground shadow-sm lg:max-w-[55%]"
           >
-            <div className="font-semibold text-slate-500">Summary</div>
-            <div className="mt-1">
+            <div className="text-[10px] font-semibold uppercase tracking-[0.1em] text-foreground">
+              How ranking works
+            </div>
+            <div className="mt-1.5 leading-relaxed">
               <span>
                 Ranking is determined by win – loss difference (descending). Ties are broken by wins, then ties, then attribute name (all descending except name, which is alphabetical).
               </span>
@@ -1013,16 +1032,16 @@ export default function PartnerView({ baseTesting, levelTesting }: Props) {
           const count = cardsByStatus[status].length;
 
           return (
-            <section key={status} className="mb-6 last:mb-0">
+            <section key={status} className="mb-7 last:mb-0">
               <div className="flex items-center gap-3">
                 <div className={`h-px flex-1 ${ui.lineClassName}`} />
                 <button
                   type="button"
                   onClick={() => toggleSection(status)}
                   aria-expanded={isOpen}
-                  className={`inline-flex items-center gap-2 border px-3 py-2 text-xs font-semibold tracking-[0.08em] transition-colors ${ui.pillClassName}`}
+                  className={`inline-flex items-center gap-2 rounded-full border px-3.5 py-2 text-[11px] font-semibold tracking-[0.08em] shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${ui.pillClassName}`}
                 >
-                  <span className="inline-block h-1.5 w-1.5 bg-current" />
+                  <span className="inline-block h-1.5 w-1.5 rounded-full bg-current" />
                   <span>{ui.label}</span>
                   <span className="font-medium">{count}</span>
                   {isOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
@@ -1033,44 +1052,44 @@ export default function PartnerView({ baseTesting, levelTesting }: Props) {
               {isOpen ? (
                 <div className="mt-3">
                   <div
-                    className={`border px-4 py-3 text-xs leading-snug ${ui.infoClassName}`}
+                    className={`rounded-lg border px-4 py-3 text-xs leading-relaxed ${ui.infoClassName}`}
                   >
                     {ui.description}
                   </div>
 
                   {count === 0 ? (
-                    <div className="border border-dashed border-gray-300 bg-white px-4 py-6 text-center text-xs text-gray-500">
+                    <div className="mt-3 rounded-lg border border-dashed border-border bg-muted/20 px-4 py-8 text-center text-xs text-muted-foreground">
                       No attributes in this section.
                     </div>
                   ) : (
-                    <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+                    <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
                       {cardsByStatus[status].map((card) => (
                         <button
                           key={card.id}
                           type="button"
                           onClick={() => setSelectedAttributeKey(card.attributeKey)}
-                          className="group overflow-hidden border border-gray-200 bg-white text-left shadow-sm transition-all hover:border-gray-300 hover:shadow"
+                          className="group overflow-hidden rounded-lg border border-border bg-background text-left shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-foreground/20 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                         >
                           <div className={`h-1 w-full ${ui.cardTopClassName}`} />
                           <div className="p-5">
                             <div className="flex items-start justify-between gap-3">
-                              <h4 className="text-[14px] font-semibold text-slate-900">
+                              <h4 className="text-[14px] font-semibold text-foreground">
                                 {card.attribute}
                               </h4>
                               {status === "holds" ? (
-                                <span className="text-[11px] font-semibold text-slate-400">
+                                <span className="shrink-0 rounded-full bg-muted px-2 py-1 text-[10px] font-semibold text-muted-foreground">
                                   Rank {card.rank}
                                 </span>
                               ) : null}
                             </div>
-                            <p className="mt-4 text-[13px] leading-snug text-slate-600">
+                            <p className="mt-4 text-[13px] leading-relaxed text-muted-foreground">
                               {status === "does_not_hold" ? (
                                 (() => {
                                   const stats = getBaseTestingValueStats(card.baseItem);
                                   return (
                                     <>
                                       This attribute has{" "}
-                                      <span className="font-semibold text-slate-700">
+                                      <span className="font-semibold text-foreground">
                                         {stats.total}
                                       </span>{" "}
                                       values out of which{" "}
@@ -1087,7 +1106,7 @@ export default function PartnerView({ baseTesting, levelTesting }: Props) {
                                   return (
                                     <>
                                       All SKUs under this node are{" "}
-                                      <span className="font-semibold text-slate-700">
+                                      <span className="font-semibold text-foreground">
                                         {value}
                                       </span>
                                     </>
@@ -1107,7 +1126,7 @@ export default function PartnerView({ baseTesting, levelTesting }: Props) {
                                     {card.losses}
                                   </span>{" "}
                                   {pluralize(card.losses, "attribute")} and ties against{" "}
-                                  <span className="font-semibold text-slate-500">
+                                  <span className="font-semibold text-muted-foreground">
                                     {card.ties}
                                   </span>{" "}
                                   {pluralize(card.ties, "attribute")}

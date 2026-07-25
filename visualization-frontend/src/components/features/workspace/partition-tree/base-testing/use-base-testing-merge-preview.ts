@@ -123,6 +123,7 @@ function normalizePreviewResult(rawStatus: any): BaseTestingPreviewResult {
 type Params = {
   caseId?: string;
   partitionId?: string;
+  canSubmit: boolean;
 };
 
 type SubmitArgs = {
@@ -133,7 +134,7 @@ type SubmitArgs = {
   groupLabels?: string[];
 };
 
-export function useBaseTestingMergePreview({ caseId, partitionId }: Params) {
+export function useBaseTestingMergePreview({ caseId, partitionId, canSubmit }: Params) {
   const [statesByAttribute, setStatesByAttribute] = React.useState<
     Record<string, AttributeMergeState>
   >({});
@@ -236,6 +237,7 @@ export function useBaseTestingMergePreview({ caseId, partitionId }: Params) {
 
   const submitPreview = React.useCallback(
     async ({ attributeKey, attributeName, nodeId, groups, groupLabels }: SubmitArgs) => {
+      if (!canSubmit) return;
       if (!caseId || !partitionId) {
         setStatesByAttribute((prev) => ({
           ...prev,
@@ -390,7 +392,7 @@ export function useBaseTestingMergePreview({ caseId, partitionId }: Params) {
         });
       }
     },
-    [caseId, cancelPolling, partitionId],
+    [canSubmit, caseId, cancelPolling, partitionId],
   );
 
   const cancelAll = React.useCallback(() => {

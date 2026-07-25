@@ -4,6 +4,16 @@ import { useMutation, useQuery } from "@tanstack/react-query"
 import { RefreshCwIcon } from "lucide-react"
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
 import {
   CasesEmpty,
@@ -43,6 +53,7 @@ function CasesPage() {
 function CasesWorkspace() {
   const { showToast } = useUI()
   const [search, setSearch] = useState("")
+  const [caseToDelete, setCaseToDelete] = useState<Case | null>(null)
 
   const [page, setPage] = useState(1)
   const pageSize = 10
@@ -76,6 +87,24 @@ function CasesWorkspace() {
           mutationError instanceof Error
             ? mutationError.message
             : "Case could not be archived.",
+      })
+    },
+  })
+  const deleteMutation = useMutation({
+    mutationFn: (caseItem: Case) => CaseApi.deleteCase(caseItem.id),
+    onSuccess: () => {
+      setCaseToDelete(null)
+      showToast("Case deleted", "success", {
+        description: "The case and its datasets, partitions, and files were permanently removed.",
+      })
+      void refetch()
+    },
+    onError: (mutationError) => {
+      showToast("Delete failed", "error", {
+        description:
+          mutationError instanceof Error
+            ? mutationError.message
+            : "Case could not be deleted.",
       })
     },
   })
@@ -143,7 +172,9 @@ function CasesWorkspace() {
                 <CasesTable
                   cases={pageRows}
                   archivingCaseId={archiveMutation.variables?.id}
+                  deletingCaseId={deleteMutation.variables?.id}
                   onArchiveCase={(caseItem) => archiveMutation.mutate(caseItem)}
+                  onDeleteCase={(caseItem) => setCaseToDelete(caseItem)}
                 />
 
                 <div className="flex flex-col gap-2 py-2.5 sm:flex-row sm:items-center sm:justify-between">
@@ -214,6 +245,42 @@ function CasesWorkspace() {
           </section>
         ) : null}
       </div>
+
+      <AlertDialog
+        open={caseToDelete !== null}
+        onOpenChange={(open) => {
+          if (!open && !deleteMutation.isPending) {
+            setCaseToDelete(null)
+          }
+        }}
+      >
+        <AlertDialogContent size="default">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this case permanently?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {caseToDelete
+                ? `“${caseToDelete.name}” (${caseToDelete.code}) and all of its datasets, partitions, and uploaded files will be permanently removed. This cannot be undone.`
+                : "This case and all of its datasets, partitions, and uploaded files will be permanently removed. This cannot be undone."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteMutation.isPending}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              variant="destructive"
+              disabled={deleteMutation.isPending || !caseToDelete}
+              onClick={() => {
+                if (caseToDelete) {
+                  deleteMutation.mutate(caseToDelete)
+                }
+              }}
+            >
+              {deleteMutation.isPending ? "Deleting..." : "Delete case"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

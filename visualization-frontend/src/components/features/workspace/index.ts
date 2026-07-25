@@ -6,13 +6,17 @@ export {
   CompareCoverageWorkspace,
   CompareCoverageSkeleton,
 } from "./compare-coverage"
+export { WorkspaceProvider, useWorkspace } from "./workspace-provider"
 export {
-  WorkspaceProvider,
-  useWorkspace,
+  VisualizationWorkspaceProvider,
+  useVisualizationWorkspace,
   visualizationDisplayStatus,
   visualizationResultOf,
   visualizationTaskIdOf,
-} from "./workspace-provider"
+} from "./methodologies/visualization/visualization-workspace-provider"
+export { MethodologyPartitionWorkspace } from "./methodologies/methodology-partition-workspace"
+export { RoiPartitionWorkspace } from "./methodologies/roi/roi-partition-workspace"
+export { VisualizationPartitionWorkspace } from "./methodologies/visualization/visualization-partition-workspace"
 export { PartitionWorkspaceSkeleton } from "./partition-tree/partition-workspace-skeleton"
 export { PartitionTreeWorkspace } from "./partition-tree/partition-tree-workspace"
 export { DatasetChip } from "./shared/dataset-chip"

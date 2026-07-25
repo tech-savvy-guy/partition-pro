@@ -1,6 +1,10 @@
-import { CaseMethodology, type WorkflowConfig } from "./workflow.types"
+import {
+  CaseMethodology,
+  type WorkflowConfig,
+} from "./workflow.types"
 
 const roiWorkflow: WorkflowConfig = {
+  methodology: CaseMethodology.Roi,
   primaryTabs: [
     { label: "SKU Selection", value: "sku-selection" },
     { label: "SKU Math", value: "sku-math" },
@@ -13,25 +17,38 @@ const roiWorkflow: WorkflowConfig = {
       { label: "Compare Coverage", value: "compare-coverage" },
     ],
   },
+  unlockOn: "sku-selection-saved",
+  skuSubmitPipeline: "none",
+  nodeRunMode: "roi-testing-dialog",
+  roiTabs: ["sku-math", "obm", "compare-coverage"],
+}
+
+const visualizationWorkflow: WorkflowConfig = {
+  methodology: CaseMethodology.Visualization,
+  primaryTabs: [
+    { label: "SKU Selection", value: "sku-selection" },
+    { label: "Partition Tree", value: "partition-tree" },
+  ],
+  secondaryTabsByPrimary: {
+    "sku-selection": [
+      { label: "Overview", value: "overview" },
+      { label: "Multi Dimensional Scaling", value: "multi-dimensional-scaling" },
+    ],
+  },
+  unlockOn: "visualization-completed",
+  skuSubmitPipeline: "run-visualization",
+  nodeRunMode: "visualization-modal",
+  roiTabs: [],
 }
 
 const WORKFLOW_REGISTRY: Record<CaseMethodology, WorkflowConfig> = {
   [CaseMethodology.Roi]: roiWorkflow,
-  [CaseMethodology.Visualization]: {
-    primaryTabs: [
-      { label: "SKU Selection", value: "sku-selection" },
-      { label: "Partition Tree", value: "partition-tree" },
-    ],
-    secondaryTabsByPrimary: {
-      "sku-selection": [
-        { label: "Overview", value: "overview" },
-        { label: "Multi Dimensional Scaling", value: "multi-dimensional-scaling" },
-        { label: "Compare Coverage", value: "compare-coverage" },
-      ],
-    },
-  },
+  [CaseMethodology.Visualization]: visualizationWorkflow,
   // Combined methodology is intentionally mapped to ROI until its workflow is defined.
-  [CaseMethodology.Combined]: roiWorkflow,
+  [CaseMethodology.Combined]: {
+    ...roiWorkflow,
+    methodology: CaseMethodology.Combined,
+  },
 }
 
 export function resolveWorkflow(methodology: string): WorkflowConfig {

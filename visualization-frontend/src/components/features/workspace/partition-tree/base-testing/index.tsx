@@ -51,7 +51,7 @@ function singletonGroups(values: string[]): string[][] {
 }
 
 export default function BaseTesting({ baseTesting, nodeId }: Props) {
-  const { caseId, partitionId } = usePartitionTreeContext();
+  const { caseId, partitionId, readOnly } = usePartitionTreeContext();
   const items = Array.isArray(baseTesting?.items) ? baseTesting!.items! : [];
 
   const [selectedAttributeId, setSelectedAttributeId] =
@@ -67,7 +67,7 @@ export default function BaseTesting({ baseTesting, nodeId }: Props) {
     resetState,
     submitPreview,
     cancelAll,
-  } = useBaseTestingMergePreview({ caseId, partitionId });
+  } = useBaseTestingMergePreview({ caseId, partitionId, canSubmit: !readOnly });
 
   const getItemId = React.useCallback((it: BaseTestingItem) => {
     return String((it as any)?.id ?? (it as any)?.attribute_id ?? "");
@@ -139,21 +139,25 @@ export default function BaseTesting({ baseTesting, nodeId }: Props) {
   }, []);
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-background">
       {/* Section headers */}
-      <div className="flex border-b border-gray-200 bg-gray-50 text-xs text-gray-800 flex-shrink-0">
+      <div className="flex flex-shrink-0 border-b border-border bg-muted/30 text-xs text-foreground">
         {/* Left header only when NOT expanded */}
         {!rightExpanded && (
-          <div className="flex w-1/2 items-center gap-4 border-r border-gray-200 px-6 py-2 bg-gray-200">
-            <span className="font-semibold">BASE TESTING RESULTS</span>
+          <div className="flex w-1/2 items-center gap-4 border-r border-border bg-muted/60 px-6 py-3">
+            <span className="text-[11px] font-semibold uppercase tracking-[0.08em]">
+              Base Testing Results
+            </span>
           </div>
         )}
 
         {/* Right header grows to full width when expanded */}
-        <div className={`flex ${rightExpanded ? "w-full" : "w-1/2"} items-center px-6 py-2`}>
+        <div
+          className={`flex ${rightExpanded ? "w-full" : "w-1/2"} items-center px-6 py-3`}
+        >
           <div className="flex w-full items-center justify-between gap-3">
-            <span className="font-semibold">
-              DETAILED BASE TESTING RESULTS WITH ATTRIBUTE VALUES
+            <span className="text-[11px] font-semibold uppercase tracking-[0.08em]">
+              Detailed Results with Attribute Values
             </span>
 
             {/* Show button only when right side has data */}
@@ -161,7 +165,7 @@ export default function BaseTesting({ baseTesting, nodeId }: Props) {
               <button
                 type="button"
                 onClick={() => setRightExpanded((v) => !v)}
-                className="rounded border border-gray-300 bg-white px-3 py-1 text-[12px] font-semibold text-gray-700 hover:bg-gray-100"
+                className="rounded-md border border-border bg-background px-3 py-1.5 text-[11px] font-medium text-foreground shadow-sm transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
               >
                 {rightExpanded ? "Collapse Result" : "Expand Result"}
               </button>
@@ -174,7 +178,7 @@ export default function BaseTesting({ baseTesting, nodeId }: Props) {
       <div className="flex flex-1 overflow-hidden">
         {/* Left pane only when NOT expanded */}
         {!rightExpanded && (
-          <div className="w-1/2 border-r border-gray-200 bg-gray-100 overflow-hidden h-full flex flex-col">
+          <div className="flex h-full w-1/2 flex-col overflow-hidden border-r border-border bg-muted/20">
             <BaseTestingResult
               summary={(baseTesting as any)?.summary ?? null}
               items={items}
@@ -186,12 +190,22 @@ export default function BaseTesting({ baseTesting, nodeId }: Props) {
         )}
 
         {/* Right pane becomes full width when expanded */}
-        <div className={`${rightExpanded ? "w-full" : "w-1/2"} bg-white overflow-hidden h-full flex flex-col`}>
+        <div
+          className={`${rightExpanded ? "w-full" : "w-1/2"} flex h-full flex-col overflow-hidden bg-background`}
+        >
           {selectedItem ? (
             <BaseTestingResultWithAttribute item={selectedItem} />
           ) : (
-            <div className="flex h-full items-start justify-center px-6 pt-4 text-[11px] text-gray-500">
-              Select an attribute first to see detailed results
+            <div className="flex h-full items-center justify-center p-8">
+              <div className="max-w-xs rounded-lg border border-dashed border-border bg-muted/20 px-6 py-8 text-center">
+                <p className="text-sm font-medium text-foreground">
+                  Select an attribute
+                </p>
+                <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                  Choose an attribute from the results to inspect its detailed
+                  value-level analysis.
+                </p>
+              </div>
             </div>
           )}
         </div>
@@ -205,7 +219,7 @@ export default function BaseTesting({ baseTesting, nodeId }: Props) {
           initialGroups={initialGroups}
           previousResult={mergeItem}
           state={mergeState}
-          submitDisabled={!nodeId}
+          submitDisabled={readOnly || !nodeId}
           onGroupsChange={(next) => updateGroups(mergeAttributeKey, next)}
           onReset={() => resetState(mergeAttributeKey, initialGroups)}
           onSubmit={(groupLabels) =>

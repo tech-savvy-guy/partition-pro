@@ -71,6 +71,17 @@ def get_blob_client(blob_name):
     )
 
 
+def delete_blob(blob_name):
+    """Delete a blob if it exists. Missing blobs are ignored."""
+    if not clean_text(blob_name):
+        return
+    blob_client = get_blob_client(blob_name)
+    try:
+        blob_client.delete_blob()
+    except ResourceNotFoundError:
+        pass
+
+
 def generate_blob_sas_url(blob_name, permission, ttl_seconds, content_type=None):
     ensure_azure_storage_configured()
     now = timezone.now()

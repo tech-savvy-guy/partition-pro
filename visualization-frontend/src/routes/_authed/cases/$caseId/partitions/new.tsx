@@ -8,7 +8,6 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
   Field,
-  FieldDescription,
   FieldError,
   FieldGroup,
   FieldLabel,
@@ -27,11 +26,9 @@ import { Spinner } from "@/components/ui/spinner"
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
 import {
-  type AssignableUser,
   CaseApi,
   PartitionApi,
   PartitionStatus,
-  UserApi,
   type CreatePartitionPayload,
   type Partition,
   type PartitionStatus as PartitionStatusValue,
@@ -50,8 +47,6 @@ type FormValues = {
   isShared: boolean
   tags: string[]
   basePartition: string
-  lockedBy: string
-  lockExpiresAt: string
 }
 
 type FormErrors = Partial<Record<keyof FormValues | "form", string>>
@@ -71,8 +66,6 @@ const initialValues: FormValues = {
   isShared: false,
   tags: [],
   basePartition: noneValue,
-  lockedBy: noneValue,
-  lockExpiresAt: "",
 }
 
 function NewPartitionPage() {
@@ -102,10 +95,6 @@ function NewPartitionWorkspace() {
   const partitionsQuery = useQuery({
     queryKey: ["case-partitions", caseId],
     queryFn: () => PartitionApi.listPartitions(caseId),
-  })
-  const usersQuery = useQuery({
-    queryKey: ["assignable-users"],
-    queryFn: UserApi.listUsers,
   })
 
   const mutation = useMutation({
@@ -179,7 +168,7 @@ function NewPartitionWorkspace() {
     mutation.mutate(validation.payload)
   }
 
-  const pageError = caseQuery.error || partitionsQuery.error || usersQuery.error
+  const pageError = caseQuery.error || partitionsQuery.error
 
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-col gap-6">
@@ -199,8 +188,7 @@ function NewPartitionWorkspace() {
           Create partition
         </h1>
         <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">
-          Add a partition to this case, including sharing, lineage, and lock
-          metadata when needed.
+          Add a partition to this case, including sharing and lineage metadata.
         </p>
       </div>
 
@@ -337,31 +325,6 @@ function NewPartitionWorkspace() {
               partitions={partitionsQuery.data ?? []}
               onValueChange={(value) => updateField("basePartition", value)}
             />
-
-            <UserSelect
-              value={values.lockedBy}
-              users={usersQuery.data ?? []}
-              onValueChange={(value) => updateField("lockedBy", value)}
-            />
-
-            <Field data-invalid={Boolean(errors.lockExpiresAt)}>
-              <FieldLabel htmlFor="partition-lock-expiry">
-                Lock expiry
-              </FieldLabel>
-              <Input
-                id="partition-lock-expiry"
-                type="datetime-local"
-                value={values.lockExpiresAt}
-                onChange={(event) =>
-                  updateField("lockExpiresAt", event.target.value)
-                }
-                aria-invalid={Boolean(errors.lockExpiresAt)}
-              />
-              <FieldDescription>
-                Optional. Leave empty for no lock expiry.
-              </FieldDescription>
-              <FieldError>{errors.lockExpiresAt}</FieldError>
-            </Field>
           </FieldGroup>
 
           <div className="mt-auto flex flex-col gap-2">
@@ -430,41 +393,6 @@ function PartitionSelect({
   )
 }
 
-function UserSelect({
-  value,
-  users,
-  onValueChange,
-}: {
-  value: string
-  users: AssignableUser[]
-  onValueChange: (value: string) => void
-}) {
-  return (
-    <Field>
-      <FieldLabel>Locked by</FieldLabel>
-      <Select value={value} onValueChange={(v) => onValueChange(v ?? "")}>
-        <SelectTrigger className="w-full">
-          <SelectValue>
-            {value === noneValue
-              ? "Unlocked"
-              : users.find((user) => user.id === value)?.display_name}
-          </SelectValue>
-        </SelectTrigger>
-        <SelectContent>
-          <SelectGroup>
-            <SelectItem value={noneValue}>Unlocked</SelectItem>
-            {users.map((user) => (
-              <SelectItem key={user.id} value={user.id}>
-                {user.display_name}
-              </SelectItem>
-            ))}
-          </SelectGroup>
-        </SelectContent>
-      </Select>
-    </Field>
-  )
-}
-
 function validateForm(values: FormValues): {
   errors: FormErrors
   payload?: CreatePartitionPayload
@@ -474,10 +402,6 @@ function validateForm(values: FormValues): {
 
   if (!name) {
     errors.name = "Name is required."
-  }
-
-  if (values.lockExpiresAt && Number.isNaN(new Date(values.lockExpiresAt).getTime())) {
-    errors.lockExpiresAt = "Lock expiry must be a valid datetime."
   }
 
   if (Object.keys(errors).length > 0) {
@@ -494,10 +418,6 @@ function validateForm(values: FormValues): {
       tags: values.tags.length > 0 ? { labels: values.tags } : {},
       base_partition:
         values.basePartition === noneValue ? null : values.basePartition,
-      locked_by: values.lockedBy === noneValue ? null : values.lockedBy,
-      lock_expires_at: values.lockExpiresAt
-        ? new Date(values.lockExpiresAt).toISOString()
-        : null,
     },
   }
 }

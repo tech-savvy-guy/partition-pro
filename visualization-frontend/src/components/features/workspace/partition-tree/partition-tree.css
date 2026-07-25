@@ -25,6 +25,31 @@
   display: none;
 }
 
+.workflow-tabs-scroll {
+  scrollbar-width: none;
+}
+
+.workflow-tabs-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.workflow-attribute-table {
+  width: 100% !important;
+  min-width: 100% !important;
+  table-layout: fixed !important;
+}
+
+.partition-tree-data-table .workflow-attribute-table {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.partition-tree-data-table:has(.workflow-attribute-table),
+.partition-tree-data-table:has(.workflow-attribute-table) [data-slot="table-container"] {
+  width: 100%;
+  max-width: 100%;
+}
+
 .workflow-attribute-table th,
 .sku-selection-table th,
 .level-testing-table th,
@@ -36,6 +61,56 @@
   text-transform: uppercase;
 }
 
+.workflow-attribute-table th,
+.workflow-attribute-table td {
+  vertical-align: middle;
+}
+
+.workflow-attribute-table thead {
+  background: color-mix(in oklch, var(--muted), var(--background) 25%);
+}
+
+.workflow-attribute-table th {
+  height: 40px;
+  padding: 0 14px;
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  font-size: 11px;
+  letter-spacing: 0.035em;
+}
+
+.workflow-attribute-table td {
+  height: 46px;
+  padding: 8px 14px;
+  border-bottom: 1px solid color-mix(in oklch, var(--border), transparent 20%);
+  background: var(--background);
+}
+
+.workflow-attribute-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.workflow-attribute-table tbody tr {
+  transition: background-color 120ms ease;
+}
+
+.workflow-attribute-table tbody tr:hover td {
+  background: color-mix(in oklch, var(--muted), transparent 55%);
+}
+
+.workflow-attribute-table .col-attribute {
+  width: 280px;
+  border-right: 1px solid var(--border);
+}
+
+.workflow-attribute-table .col-values {
+  width: auto;
+}
+
+.workflow-attribute-table td.col-values {
+  overflow: hidden;
+}
+
 .sku-cell {
   display: block;
   max-width: 18rem;
@@ -45,8 +120,22 @@
 }
 
 .col-checkbox {
-  width: 42px;
+  width: 52px;
   text-align: center;
+}
+
+.workflow-attribute-table .col-checkbox {
+  padding: 0 !important;
+  border-right: 1px solid var(--border);
+  text-align: center;
+}
+
+.workflow-attribute-table .col-checkbox [data-slot="checkbox"] {
+  margin-inline: auto;
+}
+
+.workflow-attribute-table [data-slot="checkbox"] {
+  border-radius: 0;
 }
 
 .col-center {

@@ -1,3 +1,13 @@
 export { WorkflowProvider, useWorkflow } from "./workflow.context"
-export { CaseMethodology } from "./workflow.types"
-export type { WorkflowConfig, TabConfig } from "./workflow.types"
+export {
+  CaseMethodology,
+  SELECTABLE_METHODOLOGIES,
+} from "./workflow.types"
+export type {
+  CaseMethodology as CaseMethodologyValue,
+  WorkflowConfig,
+  TabConfig,
+  WorkflowUnlockOn,
+  WorkflowSkuSubmitPipeline,
+  WorkflowNodeRunMode,
+} from "./workflow.types"

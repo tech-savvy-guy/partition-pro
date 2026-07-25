@@ -36,6 +36,7 @@ from core.services.case import (
     create_case_assignments,
     get_active_case,
     get_active_dataset,
+    purge_case,
     serialize_case,
 )
 from core.services.datasets import (
@@ -63,7 +64,10 @@ from core.services.roi.progress import (
     get_roi_progress,
     publish_node_testing_progress,
 )
-from core.services.preprocessing.progress import get_preprocessing_progress
+from core.services.preprocessing.progress import (
+    get_preprocessing_progress,
+    publish_preprocessing_progress,
+)
 from core.services.preprocessing.guard import CaseNotReadyError, require_case_ready
 from core.services.preprocessing.read import metadata_for_current_selection_any_status
 from core.services.roi.workflow import (
@@ -106,13 +110,63 @@ from core.services.utils import (
     clean_text,
     dedupe,
     is_valid_uuid,
-    parse_optional_datetime,
     parse_positive_int,
 )
 from security.permissions import HasAnyPermission, HasPermission
 from security.rbac import Permission, get_permissions_for_role, normalize_role
 
 logger = logging.getLogger(__name__)
+
+
+def _active_partition_lock(partition, *, now=None) -> dict | None:
+    """Return the effective lease, treating incomplete or expired rows as unlocked."""
+    now = now or timezone.now()
+    if (
+        partition.locked_by_id is None
+        or partition.lock_expires_at is None
+        or partition.lock_expires_at <= now
+    ):
+        return None
+
+    return {
+        "locked_by": str(partition.locked_by_id),
+        "locked_by_display_name": partition.locked_by_display_name,
+        "lock_expires_at": partition.lock_expires_at.isoformat(),
+    }
+
+
+def _partition_lock_conflict_response(partition, *, lock=None) -> Response:
+    lock = lock or _active_partition_lock(partition)
+    payload = {
+        "code": "partition_locked",
+        "detail": "Partition is locked by another user.",
+        "locked_by": None,
+        "locked_by_display_name": None,
+        "lock_expires_at": None,
+    }
+    if lock is not None:
+        payload.update(lock)
+    return Response(payload, status=status.HTTP_409_CONFLICT)
+
+
+def _partition_edit_lock_error(partition, user) -> Response | None:
+    """Require a current lease owned by ``user`` before a partition mutation."""
+    partition.refresh_from_db(fields=["locked_by", "lock_expires_at"])
+    lock = _active_partition_lock(partition)
+    if lock is not None and partition.locked_by_id == user.id:
+        return None
+    if lock is not None:
+        return _partition_lock_conflict_response(partition, lock=lock)
+    return Response(
+        {
+            "code": "partition_lock_required",
+            "detail": "An active partition lock owned by the current user is required.",
+            "locked_by": None,
+            "locked_by_display_name": None,
+            "lock_expires_at": None,
+        },
+        status=status.HTTP_409_CONFLICT,
+    )
 
 
 class MeView(APIView):
@@ -179,7 +233,7 @@ class CasesView(APIView):
                     name=clean_text(data.get("name")),
                     code=code,
                     description=clean_text(data.get("description")),
-                    methodology=clean_text(data.get("methodology")),
+                    methodology=clean_text(data.get("methodology")).lower(),
                     category=clean_text(data.get("category")),
                     status=status_value,
                     is_archived=status_value == Case.Status.ARCHIVED,
@@ -204,6 +258,8 @@ class CaseDetailView(APIView):
     def get_permissions(self):
         if self.request.method == "PATCH":
             return [HasPermission(Permission.CREATE_CASES.value)()]
+        if self.request.method == "DELETE":
+            return [HasPermission(Permission.DELETE_CASES.value)()]
         return [
             HasAnyPermission(
                 Permission.VIEW_CASES.value,
@@ -239,7 +295,10 @@ class CaseDetailView(APIView):
                 continue
 
             if field_name in CASE_TEXT_FIELDS:
-                setattr(case, field_name, clean_text(data.get(field_name)))
+                value = clean_text(data.get(field_name))
+                if field_name == "methodology":
+                    value = value.lower()
+                setattr(case, field_name, value)
             elif field_name == "tags":
                 setattr(case, field_name, data.get(field_name) or {})
             elif field_name == "status":
@@ -265,6 +324,17 @@ class CaseDetailView(APIView):
             )
 
         return Response(serialize_case(case, request.user))
+
+    def delete(self, request, case_id):
+        case = get_active_case(case_id)
+        if case is None:
+            return Response(
+                {"detail": "Case not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        purge_case(case)
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class CasePartitionsView(APIView):
@@ -333,8 +403,6 @@ class CasePartitionsView(APIView):
                 is_shared=bool(data.get("is_shared")),
                 tags=data.get("tags") or {},
                 base_partition_id=clean_text(data.get("base_partition")) or None,
-                locked_by_id=clean_text(data.get("locked_by")) or None,
-                lock_expires_at=parse_optional_datetime(data.get("lock_expires_at")),
                 created_by=request.user,
                 updated_by=request.user,
             )
@@ -703,6 +771,10 @@ class PartitionSkuSelectionView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
+        lock_error = _partition_edit_lock_error(partition, request.user)
+        if lock_error is not None:
+            return lock_error
+
         try:
             require_case_ready(case_id)
         except CaseNotReadyError as exc:
@@ -797,6 +869,10 @@ class VisualizationRunView(APIView):
                 {"detail": "User cannot run visualization for this case."},
                 status=status.HTTP_403_FORBIDDEN,
             )
+
+        lock_error = _partition_edit_lock_error(partition, request.user)
+        if lock_error is not None:
+            return lock_error
 
         try:
             require_case_ready(case_id)
@@ -1046,6 +1122,10 @@ class RoiRunView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
+        lock_error = _partition_edit_lock_error(partition, request.user)
+        if lock_error is not None:
+            return lock_error
+
         try:
             require_case_ready(case_id)
         except CaseNotReadyError as exc:
@@ -1216,9 +1296,12 @@ class PreprocessingStatusView(APIView):
 
         metadata = metadata_for_current_selection_any_status(case_id)
         if metadata is None:
+            # Valid case with no preprocessing artifacts yet — not a missing
+            # resource. 200 keeps the network tab / clients from treating the
+            # idle state as an error (frontend already accepts NOT_FOUND).
             return Response(
                 {"status": "NOT_FOUND", "case_id": str(case_id)},
-                status=status.HTTP_404_NOT_FOUND,
+                status=status.HTTP_200_OK,
             )
         return Response(
             {
@@ -1392,6 +1475,10 @@ class PartitionWorkflowProcessRunView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
+        lock_error = _partition_edit_lock_error(partition, request.user)
+        if lock_error is not None:
+            return lock_error
+
         try:
             require_case_ready(case_id)
         except CaseNotReadyError as exc:
@@ -1504,6 +1591,10 @@ class PartitionTreeNodeView(APIView):
                 {"detail": "User cannot update the partition tree for this case."},
                 status=status.HTTP_403_FORBIDDEN,
             )
+
+        lock_error = _partition_edit_lock_error(partition, request.user)
+        if lock_error is not None:
+            return lock_error
 
         try:
             require_case_ready(case_id)
@@ -1713,6 +1804,10 @@ class PartitionTreeNodeColorsView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
+        lock_error = _partition_edit_lock_error(partition, request.user)
+        if lock_error is not None:
+            return lock_error
+
         params = request.data or {}
         attribute_name = (params.get("attribute_name") or "").strip()
         if not attribute_name:
@@ -1834,21 +1929,25 @@ class CaseDatasetSelectionView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        locked_partitions = _locked_partitions_summary(case.id)
-        if locked_partitions:
-            return Response(
-                {
-                    "detail": (
-                        f"{len(locked_partitions)} partition(s) are currently being "
-                        "edited; cannot change datasets until they're released."
-                    ),
-                    "locked_partitions": locked_partitions,
-                },
-                status=status.HTTP_409_CONFLICT,
-            )
-
         try:
             with transaction.atomic():
+                locked_partitions = _locked_partitions_summary(
+                    case.id,
+                    lock_rows=True,
+                )
+                if locked_partitions:
+                    return Response(
+                        {
+                            "detail": (
+                                f"{len(locked_partitions)} partition(s) are currently "
+                                "being edited; cannot change datasets until they're "
+                                "released."
+                            ),
+                            "locked_partitions": locked_partitions,
+                        },
+                        status=status.HTTP_409_CONFLICT,
+                    )
+
                 for field_name, dataset_type in DATASET_SELECTION_FIELD_TYPES.items():
                     if field_name not in data or data.get(field_name) is None:
                         continue
@@ -1859,10 +1958,12 @@ class CaseDatasetSelectionView(APIView):
                             status=status.HTTP_400_BAD_REQUEST,
                         )
                     _select_and_ingest_dataset(dataset)
+
+                preprocessing = _dispatch_preprocessing(case.id)
         except DatasetIngestionError as exc:
             return Response({"detail": str(exc)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-        return Response(_dispatch_preprocessing(case.id), status=status.HTTP_202_ACCEPTED)
+        return Response(preprocessing, status=status.HTTP_202_ACCEPTED)
 
 
 def _case_not_ready_response(exc: CaseNotReadyError) -> Response:
@@ -1872,26 +1973,34 @@ def _case_not_ready_response(exc: CaseNotReadyError) -> Response:
     )
 
 
-def _locked_partitions_summary(case_id) -> list[dict]:
-    """Active (unexpired) locks on the case's partitions, newest-lock-first,
-    for surfacing in 409 conflict responses and the force-release action."""
-    return [
-        {
-            "id": str(partition.id),
-            "name": partition.name,
-            "locked_by": partition.locked_by_display_name,
-            "lock_expires_at": (
-                partition.lock_expires_at.isoformat() if partition.lock_expires_at else None
-            ),
-        }
-        for partition in Partition.objects.filter(
-            case_id=case_id,
-            locked_by__isnull=False,
-            lock_expires_at__gt=timezone.now(),
+def _locked_partitions_summary(case_id, *, lock_rows=False) -> list[dict]:
+    """Return effective active leases, optionally locking every case partition row."""
+    partitions = Partition.objects.filter(
+        case_id=case_id,
+        is_deleted=False,
+    ).order_by("-lock_expires_at")
+    if lock_rows:
+        # Lock Partition rows alone. select_related("locked_by") adds a LEFT OUTER
+        # JOIN that Postgres rejects with FOR UPDATE; of=("self",) also fails
+        # because Meta.db_table is schema-qualified ("core"."partitions").
+        partitions = partitions.select_for_update()
+    else:
+        partitions = partitions.select_related("locked_by")
+
+    now = timezone.now()
+    summary = []
+    for partition in partitions:
+        lock = _active_partition_lock(partition, now=now)
+        if lock is None:
+            continue
+        summary.append(
+            {
+                "id": str(partition.id),
+                "name": partition.name,
+                **lock,
+            }
         )
-        .select_related("locked_by")
-        .order_by("-lock_expires_at")
-    ]
+    return summary
 
 
 def _select_and_ingest_dataset(dataset) -> None:
@@ -1908,7 +2017,12 @@ def _dispatch_preprocessing(case_id) -> dict:
     """Enqueue ``preprocess_case_task`` for the case's current dataset
     combination — unless that exact signature is already READY or RUNNING,
     in which case return its status synchronously with no Celery dispatch
-    (this is the "preserve combinations" reuse behavior)."""
+    (this is the "preserve combinations" reuse behavior).
+
+    Seeds Redis with QUEUED immediately so a status poll that lands before
+    the worker starts does not fall through to NOT_FOUND (same pattern as
+    node-testing progress seeding).
+    """
     case_id = str(case_id)
     existing = metadata_for_current_selection_any_status(case_id)
     if existing is not None and existing.status in (
@@ -1922,12 +2036,20 @@ def _dispatch_preprocessing(case_id) -> dict:
         }
 
     try:
-        preprocess_case_task.apply_async(args=[case_id], queue="preprocess")
+        preprocess_case_task.apply_async(args=[case_id], queue="preprocessing")
     except Exception:
         logger.exception("Failed to enqueue preprocessing for case %s", case_id)
         return {"status": "FAILED", "case_id": case_id, "detail": "Could not start preprocessing."}
 
-    return {"status": "QUEUED", "case_id": case_id}
+    queued = {"status": "QUEUED", "case_id": case_id, "percent": 0.0}
+    try:
+        publish_preprocessing_progress(case_id, queued)
+    except Exception:
+        logger.exception(
+            "Failed to publish QUEUED preprocessing progress for case %s", case_id
+        )
+
+    return queued
 
 
 class CasePreprocessingRunView(APIView):
@@ -1951,20 +2073,26 @@ class CasePreprocessingRunView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        locked_partitions = _locked_partitions_summary(case.id)
-        if locked_partitions:
-            return Response(
-                {
-                    "detail": (
-                        f"{len(locked_partitions)} partition(s) are currently being "
-                        "edited; cannot start preprocessing until they're released."
-                    ),
-                    "locked_partitions": locked_partitions,
-                },
-                status=status.HTTP_409_CONFLICT,
+        with transaction.atomic():
+            locked_partitions = _locked_partitions_summary(
+                case.id,
+                lock_rows=True,
             )
+            if locked_partitions:
+                return Response(
+                    {
+                        "detail": (
+                            f"{len(locked_partitions)} partition(s) are currently being "
+                            "edited; cannot start preprocessing until they're released."
+                        ),
+                        "locked_partitions": locked_partitions,
+                    },
+                    status=status.HTTP_409_CONFLICT,
+                )
 
-        return Response(_dispatch_preprocessing(case.id), status=status.HTTP_202_ACCEPTED)
+            preprocessing = _dispatch_preprocessing(case.id)
+
+        return Response(preprocessing, status=status.HTTP_202_ACCEPTED)
 
 
 class CasePartitionLocksReleaseView(APIView):
@@ -1985,12 +2113,16 @@ class CasePartitionLocksReleaseView(APIView):
                 status=status.HTTP_403_FORBIDDEN,
             )
 
-        released = _locked_partitions_summary(case.id)
-        if released:
-            with transaction.atomic():
-                Partition.objects.select_for_update().filter(
+        with transaction.atomic():
+            released = _locked_partitions_summary(case.id, lock_rows=True)
+            if released:
+                Partition.objects.filter(
                     id__in=[item["id"] for item in released]
-                ).update(locked_by=None, lock_expires_at=None, updated_at=timezone.now())
+                ).update(
+                    locked_by=None,
+                    lock_expires_at=None,
+                    updated_at=timezone.now(),
+                )
 
         return Response(
             {"released_count": len(released), "released_partitions": released},
@@ -2017,38 +2149,35 @@ class PartitionLockView(APIView):
         if partition is None:
             return Response({"detail": "Partition not found."}, status=status.HTTP_404_NOT_FOUND)
 
-        now = timezone.now()
-        with transaction.atomic():
-            partition = Partition.objects.select_for_update().get(id=partition.id)
-            is_free = partition.locked_by_id is None or (
-                partition.lock_expires_at is not None and partition.lock_expires_at <= now
+        if not can_edit_workflow(request.user, case):
+            return Response(
+                {"detail": "User cannot edit workflows for this case."},
+                status=status.HTTP_403_FORBIDDEN,
             )
-            is_self = partition.locked_by_id == request.user.id
-            if not is_free and not is_self:
-                return Response(
-                    {
-                        "detail": "Partition is locked by another user.",
-                        "locked_by": partition.locked_by_display_name,
-                        "lock_expires_at": (
-                            partition.lock_expires_at.isoformat()
-                            if partition.lock_expires_at
-                            else None
-                        ),
-                    },
-                    status=status.HTTP_409_CONFLICT,
+
+        with transaction.atomic():
+            partition = (
+                Partition.objects.select_for_update()
+                .get(id=partition.id)
+            )
+            active_lock = _active_partition_lock(partition)
+            if (
+                active_lock is not None
+                and partition.locked_by_id != request.user.id
+            ):
+                return _partition_lock_conflict_response(
+                    partition,
+                    lock=active_lock,
                 )
 
             partition.locked_by = request.user
-            partition.lock_expires_at = now + timedelta(seconds=settings.LOCK_TTL_SECONDS)
+            partition.lock_expires_at = timezone.now() + timedelta(
+                seconds=settings.LOCK_TTL_SECONDS
+            )
             partition.save(update_fields=["locked_by", "lock_expires_at", "updated_at"])
+            lock = _active_partition_lock(partition)
 
-        return Response(
-            {
-                "locked_by": partition.locked_by_display_name,
-                "lock_expires_at": partition.lock_expires_at.isoformat(),
-            },
-            status=status.HTTP_200_OK,
-        )
+        return Response(lock, status=status.HTTP_200_OK)
 
     def delete(self, request, case_id, partition_id):
         case = get_active_case(case_id)
@@ -2059,15 +2188,29 @@ class PartitionLockView(APIView):
             return Response({"detail": "Partition not found."}, status=status.HTTP_404_NOT_FOUND)
 
         with transaction.atomic():
-            partition = Partition.objects.select_for_update().get(id=partition.id)
-            if partition.locked_by_id not in (None, request.user.id):
-                return Response(
-                    {"detail": "Partition is locked by another user."},
-                    status=status.HTTP_409_CONFLICT,
+            partition = (
+                Partition.objects.select_for_update()
+                .get(id=partition.id)
+            )
+            active_lock = _active_partition_lock(partition)
+            if (
+                active_lock is not None
+                and partition.locked_by_id != request.user.id
+            ):
+                return _partition_lock_conflict_response(
+                    partition,
+                    lock=active_lock,
                 )
-            partition.locked_by = None
-            partition.lock_expires_at = None
-            partition.save(update_fields=["locked_by", "lock_expires_at", "updated_at"])
+
+            if (
+                partition.locked_by_id is not None
+                or partition.lock_expires_at is not None
+            ):
+                partition.locked_by = None
+                partition.lock_expires_at = None
+                partition.save(
+                    update_fields=["locked_by", "lock_expires_at", "updated_at"]
+                )
 
         return Response(status=status.HTTP_204_NO_CONTENT)
 
@@ -2147,11 +2290,11 @@ def parse_task_bool(value, *, default: bool) -> bool:
 
 
 def _async_response_status(status_value):
-    """200 for terminal states, 202 for in-flight ones. COMPLETED/FAILED are
-    the visualization/ROI vocabulary, READY the preprocessing one — the two
-    never overlap, so one mapper serves all three pipelines."""
+    """200 for terminal/idle states, 202 for in-flight ones. COMPLETED/FAILED
+    are the visualization/ROI vocabulary, READY/NOT_FOUND the preprocessing
+    ones — they never overlap, so one mapper serves all three pipelines."""
     normalized = str(status_value or "").upper()
-    if normalized in {"COMPLETED", "FAILED", "READY"}:
+    if normalized in {"COMPLETED", "FAILED", "READY", "NOT_FOUND"}:
         return status.HTTP_200_OK
     return status.HTTP_202_ACCEPTED
 
@@ -2184,6 +2327,16 @@ def validate_case_payload(data, partial=False, case=None):
         valid_statuses = {value for value, _label in Case.Status.choices}
         if status_value not in valid_statuses:
             errors["status"] = ["Status must be draft, active, archived, or completed."]
+
+    if not partial or "methodology" in data:
+        methodology_value = clean_text(data.get("methodology"))
+        valid_methodologies = {"roi", "visualization", "combined"}
+        if methodology_value and methodology_value.lower() not in valid_methodologies:
+            errors["methodology"] = [
+                "Methodology must be roi, visualization, or combined."
+            ]
+        elif not partial and not methodology_value:
+            errors["methodology"] = ["Methodology is required."]
 
     if "tags" in data and not isinstance(data.get("tags"), dict):
         errors["tags"] = ["Tags must be a JSON object."]
@@ -2232,18 +2385,9 @@ def validate_partition_payload(data, case):
     ).exists():
         errors["base_partition"] = ["Base partition must belong to this case."]
 
-    locked_by_id = clean_text(data.get("locked_by"))
-    if locked_by_id and not is_valid_uuid(locked_by_id):
-        errors["locked_by"] = ["Locked-by user must be a valid UUID."]
-    elif locked_by_id and not User.objects.filter(
-        id=locked_by_id,
-        is_active=True,
-    ).exists():
-        errors["locked_by"] = ["Locked-by user must be active."]
-
-    lock_expires_at = clean_text(data.get("lock_expires_at"))
-    if lock_expires_at and parse_optional_datetime(lock_expires_at) is None:
-        errors["lock_expires_at"] = ["Lock expiry must be a valid datetime."]
+    for field_name in ("locked_by", "lock_expires_at"):
+        if field_name in data:
+            errors[field_name] = ["This field is managed by the server."]
 
     return errors
 
@@ -2391,6 +2535,7 @@ def validate_assignments(assignments):
 
 
 def serialize_partition(partition):
+    lock = _active_partition_lock(partition)
     return {
         "id": str(partition.id),
         "case_id": str(partition.case_id),
@@ -2403,13 +2548,11 @@ def serialize_partition(partition):
         "base_partition": (
             str(partition.base_partition_id) if partition.base_partition_id else None
         ),
-        "locked_by": str(partition.locked_by_id) if partition.locked_by_id else None,
-        "locked_by_display_name": partition.locked_by_display_name,
-        "lock_expires_at": (
-            partition.lock_expires_at.isoformat()
-            if partition.lock_expires_at
-            else None
+        "locked_by": lock["locked_by"] if lock else None,
+        "locked_by_display_name": (
+            lock["locked_by_display_name"] if lock else None
         ),
+        "lock_expires_at": lock["lock_expires_at"] if lock else None,
         "created_by": str(partition.created_by_id) if partition.created_by_id else None,
         "updated_by": str(partition.updated_by_id) if partition.updated_by_id else None,
         "created_at": partition.created_at.isoformat(),

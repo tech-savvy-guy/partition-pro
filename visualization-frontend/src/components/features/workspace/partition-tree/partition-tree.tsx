@@ -1,5 +1,4 @@
 import React, {
-  Fragment,
   useCallback,
   useEffect,
   useMemo,
@@ -83,13 +82,16 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetClose,
-} from "@/components/ui/sheet"
-import { Button } from "@/components/ui/button"
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyTitle,
+} from "@/components/ui/empty"
+import { Spinner } from "@/components/ui/spinner"
+import {
+  WorkflowModalShell,
+  type WorkflowModalStatus,
+} from "@/components/features/workspace/workflow/workflow-modal-shell"
 
 import { PartitionTreeProvider, usePartitionTreeContext } from "./context"
 import type {
@@ -98,12 +100,14 @@ import type {
   RunNodeInfo,
 } from "@/lib/partition-tree/types"
 import type { WorkflowNodeObject } from "@/lib/partition-tree/tree.types"
+import { cn } from "@/lib/utils"
 import AttributeRollUp from "./attribute-roll-up"
 
 import BaseTesting from "./base-testing"
 import LevelTesting from "./level-testing"
 import AttributeSelection from "./attribute-selection"
 import PartnerView from "./partner-view"
+import SKUList from "./sku-list"
 
 // Workflow helper types
 type InnerTab =
@@ -111,6 +115,7 @@ type InnerTab =
   | "attribute-selection"
   | "base-testing"
   | "level-testing"
+  | "sku-list"
 type CanvasMode = "move" | "select"
 
 type NodePollResponse = {
@@ -146,6 +151,50 @@ function sameStringSet(a: string[], b: string[]): boolean {
 function isCompletedStatus(status: any) {
   const s = String(status ?? "").toUpperCase()
   return s === "COMPLETED" || s === "SUCCESS" || s === "DONE"
+}
+
+function WorkflowTabUnavailable({
+  processing,
+  status,
+  percent,
+}: {
+  processing: boolean
+  status?: string
+  percent: number
+}) {
+  if (processing) {
+    return (
+      <div
+        className="flex h-full items-center justify-center p-6"
+        role="status"
+        aria-live="polite"
+      >
+        <div className="flex max-w-sm flex-col items-center gap-3 text-center">
+          <Spinner className="size-5" />
+          <div className="flex flex-col gap-1">
+            <p className="text-sm font-medium text-foreground">
+              Preparing workflow results
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {status ?? "Processing"} · {percent.toFixed(0)}%
+            </p>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <Empty className="h-full rounded-none border-0">
+      <EmptyHeader>
+        <EmptyTitle>Submit attribute selection first</EmptyTitle>
+        <EmptyDescription>
+          Choose the attributes for this partition node, then submit to unlock
+          its workflow results.
+        </EmptyDescription>
+      </EmptyHeader>
+    </Empty>
+  )
 }
 
 function extractObmStatus(wd: any): string | null {
@@ -2010,6 +2059,23 @@ function PartitionTreeInner({
   // Workflow derived values
   const completed = isCompletedStatus(pollRes?.status)
   const percent = Number(pollRes?.percent ?? pollRes?.progress ?? 0) || 0
+  const normalizedWorkflowStatus = String(pollRes?.status ?? "").toUpperCase()
+  const workflowModalStatus: WorkflowModalStatus | null = completed
+    ? { label: "Complete", state: "completed" }
+    : normalizedWorkflowStatus === "FAILED" ||
+        normalizedWorkflowStatus === "ERROR"
+      ? { label: "Workflow failed", state: "failed" }
+      : attributeSelectionSubmitted
+        ? {
+            label:
+              normalizedWorkflowStatus === "QUEUED"
+                ? "Queued"
+                : "Processing",
+            state:
+              normalizedWorkflowStatus === "QUEUED" ? "queued" : "processing",
+            progress: percent,
+          }
+        : null
   const baseTestingPayload =
     pollRes?.data?.base_testing ?? attributeSelectionData?.base_testing ?? null
   const levelTestingPayload =
@@ -2026,16 +2092,15 @@ function PartitionTreeInner({
     enabled: boolean
   }> = [
     { id: "attribute-selection", label: "Attribute Selection", enabled: true },
-    { id: "partner-view", label: "Overview", enabled: testingTabsEnabled },
+    { id: "partner-view", label: "Partner View", enabled: testingTabsEnabled },
     { id: "base-testing", label: "Base Testing", enabled: testingTabsEnabled },
     {
       id: "level-testing",
       label: "Level Testing",
       enabled: testingTabsEnabled,
     },
+    { id: "sku-list", label: "SKU List", enabled: testingTabsEnabled },
   ]
-  const workflowTabGroups = [workflowTabs.slice(0, 2), workflowTabs.slice(2, 4)]
-
   const refitTreeView = useCallback(() => {
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
@@ -2523,158 +2588,83 @@ function PartitionTreeInner({
       </Dialog>
 
       {/* Workflow Dialog */}
-      <Sheet
+      <WorkflowModalShell
         key={isFullScreen ? "workflow-fs" : "workflow-embedded"}
         open={workflowOpen}
         onOpenChange={(open) => {
           if (!open) hideWorkflowDialog()
         }}
-      >
-        <SheetContent
-          fullScreen
-          showCloseButton={false}
-          container={dialogContainer}
-          className="gap-0 p-0"
-          data-slot="workflow-dialog"
-        >
-          <SheetHeader className="shrink-0 border-b px-6 py-3 text-left">
-            <div className="flex items-center gap-3">
-              <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-2">
-                <SheetTitle className="shrink-0 text-lg font-semibold tracking-tight">
-                  {selectedWorkflowNode?.nodeName ?? "Partition Tree"}
-                </SheetTitle>
-
-                {completed && nodeMeta && (
-                  <>
-                    <span
-                      className="hidden h-4 w-px shrink-0 bg-border sm:block"
-                      aria-hidden="true"
-                    />
-                    <dl className="flex flex-wrap items-center gap-2">
-                      <div className="inline-flex items-center gap-1.5 rounded-md border border-border/60 bg-muted/30 px-2 py-1 text-[11px]">
-                        <dt className="text-muted-foreground">Branch</dt>
-                        <dd className="font-medium tabular-nums text-foreground">
-                          {nodeMeta.branch ?? "-"}
-                        </dd>
-                      </div>
-                      <div className="inline-flex items-center gap-1.5 rounded-md border border-border/60 bg-muted/30 px-2 py-1 text-[11px]">
-                        <dt className="text-muted-foreground">Level</dt>
-                        <dd className="font-medium tabular-nums text-foreground">
-                          {nodeMeta.level ?? "-"}
-                        </dd>
-                      </div>
-                    </dl>
-                  </>
-                )}
-
-                {attributeSelectionSubmitted && !completed && (
-                  <>
-                    <span
-                      className="hidden h-4 w-px shrink-0 bg-border sm:block"
-                      aria-hidden="true"
-                    />
-                    <div className="flex flex-col gap-1 min-w-[120px] sm:min-w-[200px]">
-                      <div className="flex items-center justify-between text-[11px] font-medium text-gray-500">
-                        <span className="inline-flex items-center gap-1.5">
-                          <span className="relative flex h-1.5 w-1.5">
-                            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-blue-400 opacity-75" />
-                            <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-blue-500" />
-                          </span>
-                          Processing
-                        </span>
-                        <span className="text-gray-400 tabular-nums">
-                          {percent.toFixed(0)}%
-                        </span>
-                      </div>
-                      <div className="h-1 w-full overflow-hidden rounded-full bg-gray-100">
-                        <div
-                          className="h-full rounded-full bg-blue-500 transition-[width] duration-500 ease-out"
-                          style={{
-                            width: `${Math.min(Math.max(percent, 4), 100)}%`,
-                          }}
-                        />
-                      </div>
-                    </div>
-                  </>
-                )}
-
-                {completed && (
-                  <span className="inline-flex items-center gap-1.5 text-[11px] font-medium tracking-wide text-gray-400">
-                    <svg
-                      viewBox="0 0 20 20"
-                      fill="none"
-                      className="h-3.5 w-3.5 text-emerald-500"
-                      aria-hidden="true"
-                    >
-                      <path
-                        d="M5 10.5l3.5 3.5L15 6.5"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                    </svg>
-                    Complete
-                  </span>
-                )}
-              </div>
-
-              <SheetClose
-                render={
-                  <Button
-                    variant="link"
-                    size="sm"
-                    className="h-auto shrink-0 px-0 text-sm font-medium"
-                  />
-                }
-              >
-                Close
-              </SheetClose>
-            </div>
-          </SheetHeader>
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
-            {/* Tab bar */}
-            <div className="flex-shrink-0 border-b border-gray-200 bg-background px-6 pt-4 pb-2">
-              <div className="flex flex-wrap items-center gap-2">
-                {workflowTabGroups.map((group, groupIndex) => (
-                  <Fragment key={group.map((t) => t.id).join("-")}>
-                    {groupIndex > 0 && (
-                      <div
-                        className="mx-1 h-5 w-px shrink-0 bg-gray-300"
+        title={selectedWorkflowNode?.nodeName ?? "Partition Tree"}
+        metadata={
+          nodeMeta
+            ? [
+                { label: "Branch", value: nodeMeta.branch ?? "-" },
+                { label: "Level", value: nodeMeta.level ?? "-" },
+              ]
+            : []
+        }
+        status={workflowModalStatus}
+        container={dialogContainer}
+        navigation={
+          <div className="bg-background px-6">
+            <div className="workflow-tabs-scroll flex h-9 items-stretch overflow-x-auto overflow-y-hidden">
+              {workflowTabs.map((tab, index) => {
+                const active = activeInnerTab === tab.id
+                const isPrimaryTab =
+                  tab.id === "attribute-selection" || tab.id === "partner-view"
+                return (
+                  <React.Fragment key={tab.id}>
+                    {index === 2 ? (
+                      <span
+                        className="mx-2 h-4 w-px shrink-0 self-center bg-border"
                         aria-hidden
                       />
-                    )}
-                    {group.map((tab) => {
-                      const active = activeInnerTab === tab.id
-                      const isTopPair =
-                        tab.id === "attribute-selection" ||
-                        tab.id === "partner-view"
-                      return (
-                        <button
-                          key={tab.id}
-                          type="button"
-                          onClick={() => setActiveInnerTab(tab.id)}
-                          disabled={!tab.enabled}
-                          className={`h-8 px-4 text-[12px] font-semibold transition-colors ${
-                            active
-                              ? "bg-red-600 text-white"
-                              : isTopPair
-                                ? "bg-[#fbecee] text-[#ba2740] hover:bg-[#f7dde2]"
-                                : "bg-transparent text-gray-400 hover:text-gray-600"
-                          } disabled:cursor-not-allowed disabled:opacity-50`}
-                        >
-                          {tab.label}
-                        </button>
-                      )
-                    })}
-                  </Fragment>
-                ))}
-              </div>
+                    ) : null}
+                    <button
+                      type="button"
+                      onClick={() => setActiveInnerTab(tab.id)}
+                      disabled={!tab.enabled}
+                      aria-current={active ? "page" : undefined}
+                      className={cn(
+                        "relative h-9 shrink-0 px-3 text-[12px] transition-colors",
+                        isPrimaryTab ? "font-semibold" : "font-medium",
+                        isPrimaryTab &&
+                          active &&
+                          "bg-primary/10 text-primary",
+                        isPrimaryTab &&
+                          !active &&
+                          "text-primary/75 hover:bg-primary/5 hover:text-primary",
+                        !isPrimaryTab &&
+                          active &&
+                          "bg-muted/60 text-foreground",
+                        !isPrimaryTab &&
+                          !active &&
+                          "text-muted-foreground hover:bg-muted/40 hover:text-foreground",
+                        "disabled:cursor-not-allowed disabled:opacity-50"
+                      )}
+                    >
+                      {tab.label}
+                      {active ? (
+                        <span
+                          className={cn(
+                            "absolute inset-x-0 bottom-0 h-0.5",
+                            isPrimaryTab ? "bg-primary" : "bg-foreground/50"
+                          )}
+                        />
+                      ) : null}
+                    </button>
+                  </React.Fragment>
+                )
+              })}
             </div>
+          </div>
+        }
+      >
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
             {/* Tab content - AttributeSelection stays always-mounted to preserve checkbox state across tab changes */}
-            <div className="relative flex-1 overflow-hidden">
+            <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
               <div
-                className="h-full overflow-auto p-4"
+                className="flex h-full min-h-0 w-full flex-col overflow-hidden bg-background"
                 style={{
                   display:
                     activeInnerTab === "attribute-selection" ? "" : "none",
@@ -2694,26 +2684,16 @@ function PartitionTreeInner({
                 <div className="h-full overflow-hidden">
                   {!attributeSelectionSubmitted &&
                   !hasAttributeSelectionData ? (
-                    <div className="flex h-full items-center justify-center p-6">
-                      <div className="text-center text-sm text-gray-500">
-                        <p className="font-medium">
-                          Submit attribute selection first
-                        </p>
-                        <p className="mt-1 text-xs">
-                          Go to Attribute Selection tab and click Submit to load
-                          data
-                        </p>
-                      </div>
-                    </div>
+                    <WorkflowTabUnavailable
+                      processing={false}
+                      percent={percent}
+                    />
                   ) : !hasAttributeSelectionData && !completed ? (
-                    <div className="flex h-full items-center justify-center p-6">
-                      <div className="animate-pulse text-center text-sm text-gray-500">
-                        <p className="font-medium">Processing...</p>
-                        <p className="mt-1 text-xs">
-                          {pollRes?.status ?? "Loading"} {percent.toFixed(1)}%
-                        </p>
-                      </div>
-                    </div>
+                    <WorkflowTabUnavailable
+                      processing
+                      status={pollRes?.status}
+                      percent={percent}
+                    />
                   ) : (
                     <PartnerView
                       baseTesting={baseTestingPayload}
@@ -2725,26 +2705,16 @@ function PartitionTreeInner({
               {activeInnerTab === "base-testing" && (
                 <div className="h-full overflow-hidden">
                   {!testingTabsEnabled ? (
-                    <div className="flex h-full items-center justify-center p-6">
-                      <div className="text-center text-sm text-gray-500">
-                        <p className="font-medium">
-                          Submit attribute selection first
-                        </p>
-                        <p className="mt-1 text-xs">
-                          Go to Attribute Selection tab and click Submit to load
-                          data
-                        </p>
-                      </div>
-                    </div>
+                    <WorkflowTabUnavailable
+                      processing={false}
+                      percent={percent}
+                    />
                   ) : !hasAttributeSelectionData && !completed ? (
-                    <div className="flex h-full items-center justify-center p-6">
-                      <div className="animate-pulse text-center text-sm text-gray-500">
-                        <p className="font-medium">Processing...</p>
-                        <p className="mt-1 text-xs">
-                          {pollRes?.status ?? "Loading"} {percent.toFixed(1)}%
-                        </p>
-                      </div>
-                    </div>
+                    <WorkflowTabUnavailable
+                      processing
+                      status={pollRes?.status}
+                      percent={percent}
+                    />
                   ) : (
                     <BaseTesting
                       baseTesting={baseTestingPayload}
@@ -2754,28 +2724,18 @@ function PartitionTreeInner({
                 </div>
               )}
               {activeInnerTab === "level-testing" && (
-                <div style={{ flex: 1, minHeight: 0, height: "100%" }}>
+                <div className="h-full min-h-0 flex-1">
                   {!testingTabsEnabled ? (
-                    <div className="flex h-full items-center justify-center p-6">
-                      <div className="text-center text-sm text-gray-500">
-                        <p className="font-medium">
-                          Submit attribute selection first
-                        </p>
-                        <p className="mt-1 text-xs">
-                          Go to Attribute Selection tab and click Submit to load
-                          data
-                        </p>
-                      </div>
-                    </div>
+                    <WorkflowTabUnavailable
+                      processing={false}
+                      percent={percent}
+                    />
                   ) : !hasAttributeSelectionData && !completed ? (
-                    <div className="flex h-full items-center justify-center p-6">
-                      <div className="animate-pulse text-center text-sm text-gray-500">
-                        <p className="font-medium">Processing...</p>
-                        <p className="mt-1 text-xs">
-                          {pollRes?.status ?? "Loading"} {percent.toFixed(1)}%
-                        </p>
-                      </div>
-                    </div>
+                    <WorkflowTabUnavailable
+                      processing
+                      status={pollRes?.status}
+                      percent={percent}
+                    />
                   ) : (
                     <LevelTesting
                       levelTesting={levelTestingPayload}
@@ -2785,10 +2745,20 @@ function PartitionTreeInner({
                   )}
                 </div>
               )}
+              {activeInnerTab === "sku-list" && (
+                <div className="h-full min-h-0 overflow-hidden">
+                  <SKUList
+                    data={
+                      pollRes?.data?.sku_list
+                        ? { sku_list: pollRes.data.sku_list }
+                        : attributeSelectionData
+                    }
+                  />
+                </div>
+              )}
             </div>
           </div>
-        </SheetContent>
-      </Sheet>
+      </WorkflowModalShell>
     </div>
   )
 }

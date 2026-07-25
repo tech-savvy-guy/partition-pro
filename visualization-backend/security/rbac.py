@@ -18,6 +18,7 @@ class Permission(str, Enum):
 
     VIEW_CASES = "cases.view"
     CREATE_CASES = "cases.create"
+    DELETE_CASES = "cases.delete"
 
     VIEW_PARTITIONS = "partitions.view"
     CREATE_PARTITIONS = "partitions.create"
@@ -70,6 +71,7 @@ ADMIN_PERMISSIONS = EDITOR_PERMISSIONS | frozenset(
         Permission.VIEW_AUDIT,
         Permission.VIEW_ADMIN,
         Permission.CREATE_PARTITIONS,
+        Permission.DELETE_CASES,
     }
 )
 

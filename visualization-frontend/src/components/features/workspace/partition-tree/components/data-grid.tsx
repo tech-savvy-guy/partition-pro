@@ -110,6 +110,8 @@ export type DataGridColumn<Row> = {
   cellClassName?: string;
   headerStyle?: React.CSSProperties;
   cellStyle?: React.CSSProperties;
+  /** Explicit <col> width for table-layout:fixed layouts. */
+  width?: string | number;
   align?: DataGridAlign;
   /** Enable a per-column filter input + match-mode select in the header. */
   filter?: boolean;
@@ -132,6 +134,8 @@ export type DataGridProps<Row> = {
   rowKey: (row: Row, index: number) => string;
   /** Applied to the underlying <table> element. */
   className?: string;
+  /** Applied to the scroll/overflow wrapper around the table. */
+  wrapperClassName?: string;
   tableStyle?: React.CSSProperties;
   emptyMessage?: React.ReactNode;
   showGridlines?: boolean;
@@ -140,11 +144,14 @@ export type DataGridProps<Row> = {
   scrollHeight?: string;
   /** Multi-row grouped header rendered above the column headers. */
   headerGroups?: DataGridHeaderCell[][];
+  /** Width for the selection column when selectionMode is set. */
+  selectionColumnWidth?: string | number;
 
   /* selection */
   selectionMode?: "single" | "multiple";
   selectedKeys?: Set<string>;
   onSelectionChange?: (keys: Set<string>, rows: Row[]) => void;
+  selectionHeader?: React.ReactNode;
   selectionHeaderClassName?: string;
   selectionCellClassName?: string;
 
@@ -159,6 +166,12 @@ export type DataGridProps<Row> = {
   /* row behaviour */
   rowClassName?: (row: Row) => string;
   onRowClick?: (row: Row, index: number) => void;
+
+  /**
+   * Skip the shared Table scroll wrapper and render a plain <table>.
+   * Useful when the grid must always fill its parent width.
+   */
+  nativeTable?: boolean;
 };
 
 const alignClass: Record<DataGridAlign, string> = {
@@ -176,6 +189,7 @@ export function DataGrid<Row>({
   columns,
   rowKey,
   className,
+  wrapperClassName,
   tableStyle,
   emptyMessage = "No data.",
   showGridlines,
@@ -183,9 +197,11 @@ export function DataGrid<Row>({
   scrollable,
   scrollHeight,
   headerGroups,
+  selectionColumnWidth = 48,
   selectionMode,
   selectedKeys,
   onSelectionChange,
+  selectionHeader,
   selectionHeaderClassName,
   selectionCellClassName,
   paginate,
@@ -194,6 +210,7 @@ export function DataGrid<Row>({
   onVisibleRowsChange,
   rowClassName,
   onRowClick,
+  nativeTable = false,
 }: DataGridProps<Row>) {
   const hasFilters = columns.some((col) => col.filter);
 
@@ -271,160 +288,204 @@ export function DataGrid<Row>({
 
   const wrapperStyle: React.CSSProperties | undefined =
     scrollable && scrollHeight
-      ? { maxHeight: scrollHeight, overflow: "auto" }
+      ? scrollHeight === "100%"
+        ? { height: "100%", overflow: "auto" }
+        : { maxHeight: scrollHeight, overflow: "auto" }
       : undefined;
 
-  return (
-    <div className="partition-tree-data-table" style={wrapperStyle}>
-      <Table
-        className={cn(
-          showGridlines && "[&_td]:border [&_th]:border",
-          className,
-        )}
-        style={tableStyle}
-      >
-        <TableHeader>
-          {headerGroups?.map((groupRow, rowIndex) => (
-            <TableRow key={`group-${rowIndex}`}>
-              {groupRow.map((cell, cellIndex) => (
-                <TableHead
-                  key={`group-${rowIndex}-${cellIndex}`}
-                  colSpan={cell.colSpan}
-                  rowSpan={cell.rowSpan}
-                  className={cn("text-center", cell.className)}
-                  style={cell.style}
-                >
-                  {cell.content}
-                </TableHead>
-              ))}
-            </TableRow>
+  const hasColgroup =
+    Boolean(selectionMode) || columns.some((col) => col.width != null);
+
+  const tableClassName = cn(
+    "w-full caption-bottom text-sm",
+    showGridlines &&
+      "[&_td]:border [&_th]:border [&_td]:border-border [&_th]:border-border",
+    className,
+  );
+
+  const tableContent = (
+    <>
+      {hasColgroup ? (
+        <colgroup>
+          {selectionMode ? (
+            <col style={{ width: selectionColumnWidth }} />
+          ) : null}
+          {columns.map((col) => (
+            <col
+              key={`col-${col.key}`}
+              style={col.width != null ? { width: col.width } : undefined}
+            />
           ))}
-          <TableRow>
-            {selectionMode ? (
-              <TableHead className={selectionHeaderClassName} />
-            ) : null}
-            {columns.map((col) => {
-              const filterActive =
-                col.filter &&
-                col.field != null &&
-                (filterValues[col.field]?.trim().length ?? 0) > 0;
-              return (
-                <TableHead
-                  key={col.key}
-                  className={cn(
-                    col.align && alignClass[col.align],
-                    filterActive && "col-filter-active",
-                    col.headerClassName,
-                  )}
-                  style={col.headerStyle}
-                >
-                  <div className="flex min-w-0 flex-col gap-1">
-                    <span className="truncate">{col.header}</span>
-                    {col.filter && col.field ? (
-                      <ColumnFilter
-                        field={col.field}
-                        numeric={col.numeric}
-                        placeholder={col.filterPlaceholder}
-                        value={filterValues[col.field] ?? ""}
-                        mode={
-                          filterModes[col.field] ??
-                          (col.numeric
-                            ? FilterMatchMode.EQUALS
-                            : FilterMatchMode.CONTAINS)
-                        }
-                        onValueChange={(value) =>
-                          setFilterValues((prev) => ({
-                            ...prev,
-                            [col.field!]: value,
-                          }))
-                        }
-                        onModeChange={(mode) =>
-                          setFilterModes((prev) => ({
-                            ...prev,
-                            [col.field!]: mode,
-                          }))
-                        }
-                      />
-                    ) : null}
-                  </div>
-                </TableHead>
-              );
-            })}
+        </colgroup>
+      ) : null}
+      <TableHeader>
+        {headerGroups?.map((groupRow, rowIndex) => (
+          <TableRow key={`group-${rowIndex}`}>
+            {groupRow.map((cell, cellIndex) => (
+              <TableHead
+                key={`group-${rowIndex}-${cellIndex}`}
+                colSpan={cell.colSpan}
+                rowSpan={cell.rowSpan}
+                className={cn("text-center", cell.className)}
+                style={cell.style}
+              >
+                {cell.content}
+              </TableHead>
+            ))}
           </TableRow>
-        </TableHeader>
-        <TableBody>
-          {visibleRows.length === 0 ? (
-            <TableRow>
-              <TableCell colSpan={Math.max(totalColumns, 1)}>
-                <div className="py-6 text-center text-sm text-muted-foreground">
-                  {emptyMessage}
-                </div>
-              </TableCell>
-            </TableRow>
-          ) : (
-            visibleRows.map((row, rowIndex) => {
-              const absoluteIndex = safePage * rowsPerPage + rowIndex;
-              const key = rowKey(row, absoluteIndex);
-              const selected = selectedKeys?.has(key) ?? false;
-              return (
-                <TableRow
-                  key={key}
-                  data-state={selected ? "selected" : undefined}
-                  className={cn(
-                    stripedRows && rowIndex % 2 === 1 && "bg-muted/30",
-                    onRowClick && "cursor-pointer",
-                    rowClassName?.(row),
-                  )}
-                  onClick={
-                    onRowClick
-                      ? () => onRowClick(row, absoluteIndex)
-                      : undefined
-                  }
-                >
-                  {selectionMode ? (
-                    <TableCell className={selectionCellClassName}>
-                      {selectionMode === "multiple" ? (
-                        <Checkbox
-                          checked={selected}
-                          onCheckedChange={() => toggleSelection(key, row)}
-                          onClick={(event) => event.stopPropagation()}
-                          aria-label="Select row"
-                        />
-                      ) : (
-                        <input
-                          type="radio"
-                          checked={selected}
-                          onChange={() => toggleSelection(key, row)}
-                          onClick={(event) => event.stopPropagation()}
-                          aria-label="Select row"
-                        />
-                      )}
-                    </TableCell>
+        ))}
+        <TableRow>
+          {selectionMode ? (
+            <TableHead className={selectionHeaderClassName}>
+              {selectionHeader}
+            </TableHead>
+          ) : null}
+          {columns.map((col) => {
+            const filterActive =
+              col.filter &&
+              col.field != null &&
+              (filterValues[col.field]?.trim().length ?? 0) > 0;
+            return (
+              <TableHead
+                key={col.key}
+                className={cn(
+                  col.align && alignClass[col.align],
+                  filterActive && "col-filter-active",
+                  col.headerClassName,
+                )}
+                style={col.headerStyle}
+              >
+                <div className="flex min-w-0 flex-col gap-1">
+                  <span className="truncate">{col.header}</span>
+                  {col.filter && col.field ? (
+                    <ColumnFilter
+                      field={col.field}
+                      numeric={col.numeric}
+                      placeholder={col.filterPlaceholder}
+                      value={filterValues[col.field] ?? ""}
+                      mode={
+                        filterModes[col.field] ??
+                        (col.numeric
+                          ? FilterMatchMode.EQUALS
+                          : FilterMatchMode.CONTAINS)
+                      }
+                      onValueChange={(value) =>
+                        setFilterValues((prev) => ({
+                          ...prev,
+                          [col.field!]: value,
+                        }))
+                      }
+                      onModeChange={(mode) =>
+                        setFilterModes((prev) => ({
+                          ...prev,
+                          [col.field!]: mode,
+                        }))
+                      }
+                    />
                   ) : null}
-                  {columns.map((col) => (
-                    <TableCell
-                      key={col.key}
-                      className={cn(
-                        col.align && alignClass[col.align],
-                        col.cellClassName,
-                      )}
-                      style={col.cellStyle}
-                    >
-                      {col.cell
-                        ? col.cell(row, absoluteIndex)
-                        : col.field
-                          ? String(
-                              (row as Record<string, unknown>)[col.field] ?? "",
-                            )
-                          : null}
-                    </TableCell>
-                  ))}
-                </TableRow>
-              );
-            })
-          )}
-        </TableBody>
-      </Table>
+                </div>
+              </TableHead>
+            );
+          })}
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {visibleRows.length === 0 ? (
+          <TableRow>
+            <TableCell colSpan={Math.max(totalColumns, 1)}>
+              <div className="py-6 text-center text-sm text-muted-foreground">
+                {emptyMessage}
+              </div>
+            </TableCell>
+          </TableRow>
+        ) : (
+          visibleRows.map((row, rowIndex) => {
+            const absoluteIndex = safePage * rowsPerPage + rowIndex;
+            const key = rowKey(row, absoluteIndex);
+            const selected = selectedKeys?.has(key) ?? false;
+            return (
+              <TableRow
+                key={key}
+                data-state={selected ? "selected" : undefined}
+                className={cn(
+                  stripedRows && rowIndex % 2 === 1 && "bg-muted/30",
+                  onRowClick && "cursor-pointer",
+                  rowClassName?.(row),
+                )}
+                onClick={
+                  onRowClick
+                    ? () => onRowClick(row, absoluteIndex)
+                    : undefined
+                }
+              >
+                {selectionMode ? (
+                  <TableCell className={selectionCellClassName}>
+                    {selectionMode === "multiple" ? (
+                      <Checkbox
+                        checked={selected}
+                        onCheckedChange={() => toggleSelection(key, row)}
+                        onClick={(event) => event.stopPropagation()}
+                        aria-label="Select row"
+                      />
+                    ) : (
+                      <input
+                        type="radio"
+                        checked={selected}
+                        onChange={() => toggleSelection(key, row)}
+                        onClick={(event) => event.stopPropagation()}
+                        aria-label="Select row"
+                      />
+                    )}
+                  </TableCell>
+                ) : null}
+                {columns.map((col) => (
+                  <TableCell
+                    key={col.key}
+                    className={cn(
+                      col.align && alignClass[col.align],
+                      col.cellClassName,
+                    )}
+                    style={col.cellStyle}
+                  >
+                    {col.cell
+                      ? col.cell(row, absoluteIndex)
+                      : col.field
+                        ? String(
+                            (row as Record<string, unknown>)[col.field] ?? "",
+                          )
+                        : null}
+                  </TableCell>
+                ))}
+              </TableRow>
+            );
+          })
+        )}
+      </TableBody>
+    </>
+  );
+
+  return (
+    <div
+      className={cn(
+        "partition-tree-data-table w-full min-w-0",
+        scrollable && scrollHeight === "100%" && "h-full min-h-0",
+        wrapperClassName,
+      )}
+      style={wrapperStyle}
+    >
+      {nativeTable ? (
+        <table
+          data-slot="table"
+          className={tableClassName}
+          style={tableStyle}
+        >
+          {tableContent}
+        </table>
+      ) : (
+        <Table className={tableClassName} style={tableStyle}>
+          {tableContent}
+        </Table>
+      )}
       {paginate ? (
         <div className="flex items-center justify-between gap-3 border-t bg-background px-3 py-2 text-xs text-muted-foreground">
           <span>
